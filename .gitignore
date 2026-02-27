@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/instance/
+*.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+*.min.js
+*.min.css
+
+# ML models
+ml/models/*.pkl
+ml/models/*.joblib
+!ml/models/.gitkeep
+
+# Data files (keep structure, ignore large data)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Testing
+.pytest_cache/
+.tox/
+.nox/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
