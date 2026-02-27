@@ -86,3 +86,6 @@ Thumbs.db
 *.temp
 tmp/
 temp/
+
+# Internal planning notes (not for GitHub)
+docs/plans/
