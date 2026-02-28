@@ -1,16 +1,14 @@
 # PRISM
 
-Parking Resource Intelligence and Slot Management (PRISM) is a smart parking mini project that combines IoT sensors, MQTT messaging, and a Flask backend for real-time slot visibility.
+Parking Resource Intelligence and Slot Management (PRISM) is a smart parking system combining IoT sensors, MQTT messaging, and a Flask backend for real-time slot visibility.
 
-## Current Scope (Day 1 Baseline)
+## Features
 
-This repository currently contains the Day 1 foundation:
-
-- project structure for hardware, backend, frontend, ML, data, and docs
-- Flask backend app factory with REST endpoints
+- Flask backend with REST API
 - SQLAlchemy models for users, lots, zones, slots, and occupancy logging
 - MQTT subscriber service for sensor data ingestion
-- Arduino sketches for TinkerCAD simulation and ESP32 firmware
+- Arduino/ESP32 firmware for ultrasonic distance sensors
+- Multi-sensor simulation for TinkerCAD validation
 
 ## Repository Structure
 
@@ -65,12 +63,12 @@ Topic conventions are documented in [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
 - `main` receives stable, reviewed merges only.
 - Feature and experiment work should be isolated in short-lived branches.
 
-## Project Documentation
+## Documentation
 
-- Day 1 closure verification: [`docs/day1_closure_report.md`](docs/day1_closure_report.md)
 - MQTT contract: [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
+- Wiring diagrams: [`docs/wiring_diagram.md`](docs/wiring_diagram.md)
 
-## Backend Quick Start
+## Quick Start
 
 ```bash
 cd backend
@@ -82,9 +80,12 @@ FLASK_APP=app flask db upgrade
 python run.py
 ```
 
-## Next Planned Modules
+## Testing
 
-- authentication routes (JWT)
-- prediction and recommendation endpoints
-- frontend dashboard implementation
-- full migration history and tests expansion
+```bash
+# MQTT connectivity test
+python3 tests/test_mqtt_integration.py
+
+# Run all tests
+pytest tests/ -v
+```
