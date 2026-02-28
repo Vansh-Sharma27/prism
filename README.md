@@ -7,6 +7,7 @@ Parking Resource Intelligence and Slot Management (PRISM) is a smart parking sys
 - Flask backend with REST API
 - SQLAlchemy models for users, lots, zones, slots, and occupancy logging
 - MQTT subscriber service for sensor data ingestion
+- Next.js dashboard with real-time slot monitoring UI
 - Arduino/ESP32 firmware for ultrasonic distance sensors
 - Multi-sensor simulation for TinkerCAD validation
 
@@ -24,13 +25,18 @@ prism/
 │   ├── .env.example
 │   ├── requirements.txt
 │   └── run.py
+├── frontend/
+│   └── src/
+│       ├── app/          # Next.js pages (dashboard, lots, activity, settings)
+│       ├── components/   # Shared UI components
+│       ├── lib/          # API client, formatting, mock data
+│       └── types/        # TypeScript interfaces
 ├── hardware/
 │   ├── esp32/
 │   ├── schematics/
 │   └── tinkercad/
 ├── data/
 ├── docs/
-├── frontend/
 ├── ml/
 └── scripts/
 ```
@@ -70,6 +76,8 @@ Topic conventions are documented in [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
 
 ## Quick Start
 
+### Backend
+
 ```bash
 cd backend
 python -m venv venv
@@ -79,6 +87,17 @@ cp .env.example .env
 FLASK_APP=app flask db upgrade
 python run.py
 ```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open `http://localhost:3000` to view the dashboard.
 
 ## Testing
 

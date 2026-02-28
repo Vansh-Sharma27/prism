@@ -10,8 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -37,6 +37,8 @@ env/
 .env
 .env.local
 .env.*.local
+!.env.example
+!**/.env.example
 backend/instance/
 *.db
 
@@ -50,9 +52,11 @@ node_modules/
 frontend/node_modules/
 
 # Build outputs
+frontend/.next/
 frontend/dist/
 *.min.js
 *.min.css
+next-env.d.ts
 
 # ML models
 ml/models/*.pkl
