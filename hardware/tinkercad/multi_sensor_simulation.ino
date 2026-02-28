@@ -1,62 +1,41 @@
 /*
- * PRISM TinkerCAD Simulation - Multi-Sensor Configuration
+ * PRISM TinkerCAD Simulation - Multi-Sensor with Debounce & Filtering
  *
- * This sketch simulates 3 HC-SR04 ultrasonic sensors for parking slots.
- * Designed for TinkerCAD using Arduino Uno (ESP32 not available in TinkerCAD).
+ * Features:
+ * - 3 HC-SR04 ultrasonic sensors
+ * - Debounce state machine (prevents false triggers)
+ * - Median filtering (reduces noise)
  *
- * Hardware Setup in TinkerCAD:
- * - Arduino Uno
- * - 3x HC-SR04 Ultrasonic Sensors
+ * Designed for TinkerCAD using Arduino Uno.
  *
- * Sensor 1 (Slot A):
- *   - VCC -> 5V
- *   - GND -> GND
- *   - TRIG -> Pin 2
- *   - ECHO -> Pin 3
- *
- * Sensor 2 (Slot B):
- *   - VCC -> 5V
- *   - GND -> GND
- *   - TRIG -> Pin 4
- *   - ECHO -> Pin 5
- *
- * Sensor 3 (Slot C):
- *   - VCC -> 5V
- *   - GND -> GND
- *   - TRIG -> Pin 6
- *   - ECHO -> Pin 7
- *
- * Status LEDs (optional):
- *   - LED1 (Slot A) -> Pin 11 (via 220Ω)
- *   - LED2 (Slot B) -> Pin 12 (via 220Ω)
- *   - LED3 (Slot C) -> Pin 13 (via 220Ω)
- *
- * Behavior:
- * - Reads all 3 sensors sequentially every 500ms
- * - Outputs JSON-formatted data for each slot
- * - LEDs indicate occupied status
+ * Wiring: See docs/wiring_diagram.md
  */
 
 // Number of sensors
 const int NUM_SENSORS = 3;
 
-// Pin definitions for each sensor
+// Pin definitions
 const int TRIG_PINS[NUM_SENSORS] = {2, 4, 6};
 const int ECHO_PINS[NUM_SENSORS] = {3, 5, 7};
 const int LED_PINS[NUM_SENSORS] = {11, 12, 13};
 
-// Slot identifiers (matching backend schema)
+// Identifiers
 const char* SLOT_IDS[NUM_SENSORS] = {"slot-1", "slot-2", "slot-3"};
 const char* LOT_ID = "lot-a";
 
 // Configuration
-const float THRESHOLD_CM = 15.0;      // Distance threshold for occupancy
-const int READING_INTERVAL_MS = 500;  // Time between full sensor sweeps
-const int SENSOR_DELAY_MS = 60;       // Delay between individual sensor reads
+const float THRESHOLD_CM = 15.0;
+const int READING_INTERVAL_MS = 500;
+const int SENSOR_DELAY_MS = 60;
+const unsigned long DEBOUNCE_MS = 5000;  // 5 seconds for simulation
+const int MEDIAN_SAMPLES = 5;
 
-// State tracking for debounce (simplified for simulation)
+// Slot state with debounce tracking
 struct SlotState {
   bool occupied;
+  bool pendingChange;
+  bool pendingState;
+  unsigned long lastChangeTime;
   float lastDistance;
 };
 
@@ -65,75 +44,126 @@ SlotState slots[NUM_SENSORS];
 void setup() {
   Serial.begin(9600);
 
-  // Initialize all sensor pins
   for (int i = 0; i < NUM_SENSORS; i++) {
     pinMode(TRIG_PINS[i], OUTPUT);
     pinMode(ECHO_PINS[i], INPUT);
     pinMode(LED_PINS[i], OUTPUT);
 
-    // Initialize state
     slots[i].occupied = false;
+    slots[i].pendingChange = false;
+    slots[i].pendingState = false;
+    slots[i].lastChangeTime = 0;
     slots[i].lastDistance = 999.0;
   }
 
-  Serial.println("PRISM Multi-Sensor Parking System");
-  Serial.println("==================================");
-  Serial.print("Lot ID: ");
-  Serial.println(LOT_ID);
-  Serial.print("Sensors: ");
-  Serial.println(NUM_SENSORS);
-  Serial.print("Threshold: ");
-  Serial.print(THRESHOLD_CM);
-  Serial.println(" cm");
-  Serial.println("----------------------------------");
+  Serial.println("PRISM Multi-Sensor (Debounce + Median Filter)");
+  Serial.println("==============================================");
+  Serial.print("Debounce: ");
+  Serial.print(DEBOUNCE_MS);
+  Serial.println("ms");
+  Serial.println("----------------------------------------------");
 }
 
-float measureDistance(int sensorIndex) {
+float measureSingleDistance(int sensorIndex) {
   int trigPin = TRIG_PINS[sensorIndex];
   int echoPin = ECHO_PINS[sensorIndex];
 
-  // Send ultrasonic pulse
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  // Measure echo time (30ms timeout = ~5m max range)
   long duration = pulseIn(echoPin, HIGH, 30000);
 
-  // Calculate distance (speed of sound = 343m/s = 0.0343cm/us)
-  float distance = (duration * 0.0343) / 2.0;
-
-  // Return 999 for timeout/invalid readings
   if (duration == 0) {
     return 999.0;
   }
 
-  return distance;
+  return (duration * 0.0343) / 2.0;
 }
 
-void updateSlot(int index, float distance) {
-  bool isOccupied = (distance > 0 && distance < THRESHOLD_CM);
+// Bubble sort for median calculation
+void sortArray(float arr[], int n) {
+  for (int i = 0; i < n - 1; i++) {
+    for (int j = 0; j < n - i - 1; j++) {
+      if (arr[j] > arr[j + 1]) {
+        float temp = arr[j];
+        arr[j] = arr[j + 1];
+        arr[j + 1] = temp;
+      }
+    }
+  }
+}
 
+// Take multiple readings and return median
+float getMedianDistance(int sensorIndex) {
+  float readings[MEDIAN_SAMPLES];
+
+  for (int i = 0; i < MEDIAN_SAMPLES; i++) {
+    readings[i] = measureSingleDistance(sensorIndex);
+    delay(10);
+  }
+
+  sortArray(readings, MEDIAN_SAMPLES);
+  return readings[MEDIAN_SAMPLES / 2];
+}
+
+// Debounce state machine
+bool updateSlotState(int index, float distance) {
+  bool currentReading = (distance > 0 && distance < THRESHOLD_CM);
   slots[index].lastDistance = distance;
-  slots[index].occupied = isOccupied;
 
-  // Update LED
-  digitalWrite(LED_PINS[index], isOccupied ? HIGH : LOW);
+  // No change from current state
+  if (currentReading == slots[index].occupied) {
+    slots[index].pendingChange = false;
+    return false;
+  }
+
+  // State differs - start or continue debounce
+  if (!slots[index].pendingChange || slots[index].pendingState != currentReading) {
+    // New pending change
+    slots[index].pendingChange = true;
+    slots[index].pendingState = currentReading;
+    slots[index].lastChangeTime = millis();
+    return false;
+  }
+
+  // Check if debounce period elapsed
+  if (millis() - slots[index].lastChangeTime >= DEBOUNCE_MS) {
+    slots[index].occupied = currentReading;
+    slots[index].pendingChange = false;
+    return true;  // State changed
+  }
+
+  return false;
 }
 
-void printSlotStatus(int index) {
-  // Human-readable format
+void printStatus(int index, bool changed) {
   Serial.print(SLOT_IDS[index]);
   Serial.print(": ");
   Serial.print(slots[index].lastDistance, 1);
   Serial.print("cm -> ");
-  Serial.println(slots[index].occupied ? "OCCUPIED" : "VACANT");
+  Serial.print(slots[index].occupied ? "OCCUPIED" : "VACANT");
+
+  if (slots[index].pendingChange) {
+    unsigned long remaining = DEBOUNCE_MS - (millis() - slots[index].lastChangeTime);
+    Serial.print(" [pending: ");
+    Serial.print(remaining);
+    Serial.print("ms]");
+  }
+
+  if (changed) {
+    Serial.print(" *CHANGED*");
+  }
+
+  Serial.println();
+
+  // Update LED
+  digitalWrite(LED_PINS[index], slots[index].occupied ? HIGH : LOW);
 }
 
-void printJSONPayload(int index) {
-  // MQTT-compatible JSON payload
+void printJSON(int index) {
   Serial.print("{\"lot_id\":\"");
   Serial.print(LOT_ID);
   Serial.print("\",\"slot_id\":\"");
@@ -147,43 +177,28 @@ void printJSONPayload(int index) {
   Serial.println("}");
 }
 
-void printSummary() {
-  int occupied = 0;
-  int vacant = 0;
-
-  for (int i = 0; i < NUM_SENSORS; i++) {
-    if (slots[i].occupied) {
-      occupied++;
-    } else {
-      vacant++;
-    }
-  }
-
-  Serial.println("----------------------------------");
-  Serial.print("Summary: ");
-  Serial.print(occupied);
-  Serial.print(" occupied, ");
-  Serial.print(vacant);
-  Serial.println(" vacant");
-  Serial.println("==================================");
-}
-
 void loop() {
   Serial.println();
 
-  // Read all sensors
   for (int i = 0; i < NUM_SENSORS; i++) {
-    float distance = measureDistance(i);
-    updateSlot(i, distance);
-    printSlotStatus(i);
-    printJSONPayload(i);
-
-    // Small delay between sensors to avoid interference
+    float distance = getMedianDistance(i);
+    bool changed = updateSlotState(i, distance);
+    printStatus(i, changed);
+    printJSON(i);
     delay(SENSOR_DELAY_MS);
   }
 
-  printSummary();
+  // Summary
+  int occ = 0;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (slots[i].occupied) occ++;
+  }
+  Serial.print("Summary: ");
+  Serial.print(occ);
+  Serial.print("/");
+  Serial.print(NUM_SENSORS);
+  Serial.println(" occupied");
+  Serial.println("----------------------------------------------");
 
-  // Wait before next reading cycle
   delay(READING_INTERVAL_MS);
 }
