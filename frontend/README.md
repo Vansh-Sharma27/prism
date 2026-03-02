@@ -6,7 +6,7 @@ Next.js dashboard for real-time parking slot monitoring. Displays sensor data fr
 
 - **Framework:** Next.js 16 (App Router, TypeScript)
 - **Styling:** Tailwind CSS with custom design tokens
-- **Fonts:** Barlow Condensed (display), Barlow (body), IBM Plex Mono (data)
+- **Fonts:** Barlow Condensed (display), Barlow (body), IBM Plex Mono (data) vendored locally for offline-safe builds
 - **Icons:** Lucide React
 
 ## Project Structure

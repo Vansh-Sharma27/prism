@@ -1,26 +1,36 @@
 import type { Metadata } from "next";
-import { Barlow_Condensed, Barlow, IBM_Plex_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
 
-const barlowCondensed = Barlow_Condensed({
+const barlowCondensed = localFont({
   variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  src: [
+    { path: "./fonts/barlow-condensed-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/barlow-condensed-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/barlow-condensed-600.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/barlow-condensed-700.woff2", weight: "700", style: "normal" },
+  ],
   display: "swap",
 });
 
-const barlow = Barlow({
+const barlow = localFont({
   variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  src: [
+    { path: "./fonts/barlow-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/barlow-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/barlow-600.woff2", weight: "600", style: "normal" },
+  ],
   display: "swap",
 });
 
-const ibmPlexMono = IBM_Plex_Mono({
+const ibmPlexMono = localFont({
   variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  src: [
+    { path: "./fonts/ibm-plex-mono-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-600.woff2", weight: "600", style: "normal" },
+  ],
   display: "swap",
 });
 
