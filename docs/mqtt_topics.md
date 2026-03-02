@@ -47,6 +47,17 @@ All topics use lowercase segments and slash-separated paths.
 }
 ```
 
+Simulator outage payload extension (Day 6):
+
+```json
+{
+  "device": "simulator",
+  "slot_id": "slot-3",
+  "status": "offline",
+  "timestamp": 1739982000
+}
+```
+
 ## Naming Conventions
 
 - `lot_id` example: `lot-a`

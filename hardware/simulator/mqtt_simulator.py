@@ -12,6 +12,7 @@ import signal
 import sys
 import time
 from datetime import datetime
+from typing import Dict, Optional
 
 try:
     import paho.mqtt.client as mqtt
@@ -25,6 +26,10 @@ DEFAULT_BROKER = "localhost"
 DEFAULT_PORT = 1883
 DEFAULT_LOT_ID = "lot-a"
 DEFAULT_INTERVAL = 5  # seconds between updates
+DEFAULT_MODE = "dynamic"
+DEFAULT_FAILURE_PROBABILITY = 0.02
+DEFAULT_FAILURE_MIN_CYCLES = 2
+DEFAULT_FAILURE_MAX_CYCLES = 6
 
 # Slot configuration
 SLOTS = ["slot-1", "slot-2", "slot-3", "slot-4", "slot-5", "slot-6"]
@@ -38,19 +43,69 @@ VACANT_DISTANCE_MAX = 150.0
 # Probability of occupancy change per cycle
 CHANGE_PROBABILITY = 0.1
 
+# Coarse campus occupancy profile by hour.
+# Values represent expected occupied ratio for that hour.
+HOURLY_OCCUPANCY_PROFILE = {
+    0: 0.15,
+    1: 0.12,
+    2: 0.10,
+    3: 0.10,
+    4: 0.12,
+    5: 0.16,
+    6: 0.25,
+    7: 0.45,
+    8: 0.72,  # morning rush
+    9: 0.78,
+    10: 0.70,
+    11: 0.62,
+    12: 0.58,
+    13: 0.52,
+    14: 0.57,
+    15: 0.68,  # afternoon peak
+    16: 0.75,
+    17: 0.71,
+    18: 0.60,
+    19: 0.48,
+    20: 0.38,
+    21: 0.30,
+    22: 0.24,
+    23: 0.18,
+}
+
 
 class ParkingSimulator:
     """Simulates parking slot occupancy changes and publishes via MQTT."""
 
-    def __init__(self, broker: str, port: int, lot_id: str, interval: float):
+    def __init__(
+        self,
+        broker: str,
+        port: int,
+        lot_id: str,
+        interval: float,
+        mode: str,
+        failure_probability: float,
+        failure_min_cycles: int,
+        failure_max_cycles: int,
+        max_cycles: Optional[int],
+        seed: Optional[int],
+    ):
         self.broker = broker
         self.port = port
         self.lot_id = lot_id
         self.interval = interval
+        self.mode = mode
+        self.failure_probability = max(0.0, min(failure_probability, 1.0))
+        self.failure_min_cycles = max(1, failure_min_cycles)
+        self.failure_max_cycles = max(self.failure_min_cycles, failure_max_cycles)
+        self.max_cycles = max_cycles
         self.running = False
+
+        if seed is not None:
+            random.seed(seed)
 
         # Initialize slot states randomly
         self.slot_states = {slot: random.choice([True, False]) for slot in SLOTS}
+        self.failure_cycles_remaining: Dict[str, int] = {slot: 0 for slot in SLOTS}
 
         # MQTT client setup
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -75,20 +130,65 @@ class ParkingSimulator:
             base = random.uniform(OCCUPIED_DISTANCE_MIN, OCCUPIED_DISTANCE_MAX)
             noise = random.gauss(0, 0.5)
             return round(max(OCCUPIED_DISTANCE_MIN, base + noise), 1)
-        else:
-            # No vehicle: longer distance
-            base = random.uniform(VACANT_DISTANCE_MIN, VACANT_DISTANCE_MAX)
-            noise = random.gauss(0, 2.0)
-            return round(base + noise, 1)
 
-    def _maybe_toggle_occupancy(self, slot: str) -> bool:
-        """Randomly toggle occupancy state with configured probability."""
-        if random.random() < CHANGE_PROBABILITY:
+        # No vehicle: longer distance
+        base = random.uniform(VACANT_DISTANCE_MIN, VACANT_DISTANCE_MAX)
+        noise = random.gauss(0, 2.0)
+        return round(base + noise, 1)
+
+    def _target_occupancy_ratio(self, hour: int) -> float:
+        """Return target occupancy ratio for the current simulated hour."""
+        return HOURLY_OCCUPANCY_PROFILE.get(hour, 0.5)
+
+    def _effective_change_probability(self, slot: str, hour: int) -> float:
+        """
+        Compute occupancy flip probability.
+
+        In dynamic mode, the fleet drifts toward an hourly target occupancy ratio.
+        """
+        if self.mode == "random":
+            return CHANGE_PROBABILITY
+
+        target = self._target_occupancy_ratio(hour)
+        occupied_count = sum(1 for occupied in self.slot_states.values() if occupied)
+        current_ratio = occupied_count / len(self.slot_states)
+        delta = target - current_ratio
+
+        if self.slot_states[slot]:
+            # If we're above target, increase chance to vacate this slot.
+            if delta < 0:
+                return min(0.65, CHANGE_PROBABILITY + abs(delta) * 0.8)
+            return max(0.02, CHANGE_PROBABILITY * 0.3)
+
+        # Slot is vacant. If below target, increase chance to occupy.
+        if delta > 0:
+            return min(0.65, CHANGE_PROBABILITY + abs(delta) * 0.8)
+        return max(0.02, CHANGE_PROBABILITY * 0.3)
+
+    def _maybe_toggle_occupancy(self, slot: str, hour: int) -> bool:
+        """Toggle occupancy based on the selected simulator mode."""
+        probability = self._effective_change_probability(slot, hour)
+        if random.random() < probability:
             self.slot_states[slot] = not self.slot_states[slot]
             return True
         return False
 
-    def _publish_slot_update(self, slot: str):
+    def _slot_is_offline(self, slot: str) -> bool:
+        """Return whether a slot is in a simulated sensor outage window."""
+        remaining = self.failure_cycles_remaining[slot]
+        if remaining > 0:
+            self.failure_cycles_remaining[slot] = remaining - 1
+            return True
+
+        if random.random() < self.failure_probability:
+            self.failure_cycles_remaining[slot] = random.randint(
+                self.failure_min_cycles, self.failure_max_cycles
+            ) - 1
+            return True
+
+        return False
+
+    def _publish_slot_update(self, slot: str) -> None:
         """Publish a single slot update to MQTT."""
         is_occupied = self.slot_states[slot]
         distance = self._generate_distance(is_occupied)
@@ -100,10 +200,24 @@ class ParkingSimulator:
         }
 
         topic = f"prism/{self.lot_id}/slot/{slot}"
-        self.client.publish(topic, json.dumps(payload))
+        result = self.client.publish(topic, json.dumps(payload))
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            print(f"  {slot}: publish failed rc={result.rc}")
+            return
 
         status = "OCCUPIED" if is_occupied else "VACANT"
         print(f"  {slot}: {status:8} ({distance:5.1f} cm)")
+
+    def _publish_offline_heartbeat(self, slot: str) -> None:
+        """Emit an informational heartbeat event during simulated slot outage."""
+        payload = {
+            "device": "simulator",
+            "slot_id": slot,
+            "status": "offline",
+            "timestamp": int(time.time()),
+        }
+        topic = f"prism/{self.lot_id}/heartbeat"
+        self.client.publish(topic, json.dumps(payload))
 
     def _publish_heartbeat(self):
         """Publish device heartbeat."""
@@ -115,6 +229,29 @@ class ParkingSimulator:
         topic = f"prism/{self.lot_id}/heartbeat"
         self.client.publish(topic, json.dumps(payload))
 
+    def _print_cycle_header(self, cycle: int, hour: int) -> None:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        target = self._target_occupancy_ratio(hour)
+        current_ratio = (
+            sum(1 for occupied in self.slot_states.values() if occupied) / len(self.slot_states)
+        )
+        print(
+            f"[{timestamp}] Cycle {cycle} | "
+            f"target={target:.0%} current={current_ratio:.0%} mode={self.mode}"
+        )
+
+    def _print_start_banner(self) -> None:
+        print(f"\nSimulating {len(SLOTS)} slots in {self.lot_id}")
+        print(f"Publishing every {self.interval} seconds")
+        print(f"Mode: {self.mode}")
+        print(
+            f"Failure simulation: probability={self.failure_probability:.1%}, "
+            f"duration={self.failure_min_cycles}-{self.failure_max_cycles} cycles"
+        )
+        if self.max_cycles is not None:
+            print(f"Maximum cycles: {self.max_cycles}")
+        print("Press Ctrl+C to stop\n")
+
     def start(self):
         """Start the simulation loop."""
         self.running = True
@@ -122,23 +259,26 @@ class ParkingSimulator:
         try:
             self.client.connect(self.broker, self.port, 60)
             self.client.loop_start()
-        except Exception as e:
-            print(f"Error connecting to broker: {e}")
+        except Exception as exc:
+            print(f"Error connecting to broker: {exc}")
             return
 
-        print(f"\nSimulating {len(SLOTS)} slots in {self.lot_id}")
-        print(f"Publishing every {self.interval} seconds")
-        print("Press Ctrl+C to stop\n")
+        self._print_start_banner()
 
         cycle = 0
         while self.running:
             cycle += 1
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            print(f"[{timestamp}] Cycle {cycle}")
+            now = datetime.now()
+            self._print_cycle_header(cycle, now.hour)
 
-            # Update each slot
+            # Update each slot.
             for slot in SLOTS:
-                changed = self._maybe_toggle_occupancy(slot)
+                if self._slot_is_offline(slot):
+                    self._publish_offline_heartbeat(slot)
+                    print(f"  {slot}: OFFLINE  (simulated sensor outage)")
+                    continue
+
+                self._maybe_toggle_occupancy(slot, now.hour)
                 self._publish_slot_update(slot)
 
             # Publish heartbeat every 6 cycles (30 seconds at default interval)
@@ -147,6 +287,11 @@ class ParkingSimulator:
                 print("  [heartbeat sent]")
 
             print()
+
+            if self.max_cycles is not None and cycle >= self.max_cycles:
+                self.stop()
+                break
+
             time.sleep(self.interval)
 
     def stop(self):
@@ -187,9 +332,59 @@ def main():
         default=DEFAULT_INTERVAL,
         help=f"Seconds between updates (default: {DEFAULT_INTERVAL})",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("dynamic", "random"),
+        default=DEFAULT_MODE,
+        help="Occupancy model: dynamic follows campus hour profile, random uses static flipping",
+    )
+    parser.add_argument(
+        "--failure-probability",
+        type=float,
+        default=DEFAULT_FAILURE_PROBABILITY,
+        help=(
+            "Probability (0-1) that a slot enters simulated outage per cycle "
+            f"(default: {DEFAULT_FAILURE_PROBABILITY})"
+        ),
+    )
+    parser.add_argument(
+        "--failure-min-cycles",
+        type=int,
+        default=DEFAULT_FAILURE_MIN_CYCLES,
+        help=f"Minimum outage duration in cycles (default: {DEFAULT_FAILURE_MIN_CYCLES})",
+    )
+    parser.add_argument(
+        "--failure-max-cycles",
+        type=int,
+        default=DEFAULT_FAILURE_MAX_CYCLES,
+        help=f"Maximum outage duration in cycles (default: {DEFAULT_FAILURE_MAX_CYCLES})",
+    )
+    parser.add_argument(
+        "--cycles",
+        type=int,
+        default=None,
+        help="Optional max cycle count for bounded dataset runs",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional random seed for reproducible simulation runs",
+    )
     args = parser.parse_args()
 
-    simulator = ParkingSimulator(args.broker, args.port, args.lot, args.interval)
+    simulator = ParkingSimulator(
+        broker=args.broker,
+        port=args.port,
+        lot_id=args.lot,
+        interval=args.interval,
+        mode=args.mode,
+        failure_probability=args.failure_probability,
+        failure_min_cycles=args.failure_min_cycles,
+        failure_max_cycles=args.failure_max_cycles,
+        max_cycles=args.cycles,
+        seed=args.seed,
+    )
 
     def signal_handler(sig, frame):
         simulator.stop()
