@@ -55,14 +55,19 @@ class ParkingSlot(db.Model):
     occupancy_logs = db.relationship('OccupancyLog', backref='slot', lazy='dynamic')
     
     def to_dict(self):
+        latest_log = self.occupancy_logs.order_by(OccupancyLog.timestamp.desc()).first()
         return {
             'id': self.id,
             'lot_id': self.lot_id,
             'zone_id': self.zone_id,
+            'zone_name': self.zone.name if self.zone else None,
             'slot_number': self.slot_number,
             'is_occupied': self.is_occupied,
             'is_reserved': self.is_reserved,
             'slot_type': self.slot_type,
+            'sensor_id': self.sensor_id,
+            'latest_distance_cm': latest_log.distance_cm if latest_log else None,
+            'last_reading_at': latest_log.timestamp.isoformat() if latest_log else None,
             'last_status_change': self.last_status_change.isoformat() if self.last_status_change else None
         }
 

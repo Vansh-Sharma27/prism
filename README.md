@@ -72,7 +72,9 @@ Topic conventions are documented in [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
 ## Documentation
 
 - MQTT contract: [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
+- Hardware assembly guide: [`docs/hardware_assembly_guide.md`](docs/hardware_assembly_guide.md)
 - Wiring diagrams: [`docs/wiring_diagram.md`](docs/wiring_diagram.md)
+- Day 5 simulator integration report: [`docs/day5_full_stack_simulator_test.md`](docs/day5_full_stack_simulator_test.md)
 
 ## Quick Start
 

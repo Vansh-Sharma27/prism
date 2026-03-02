@@ -39,8 +39,7 @@ export function SlotCard({ slot, index }: SlotCardProps) {
   };
 
   const config = statusConfig[slot.status];
-  const timeSinceUpdate = Math.floor((Date.now() - slot.lastUpdate * 1000) / 1000);
-  const isStale = timeSinceUpdate > 60;
+  const isStale = slot.status === "offline";
   const slotNumber = slot.id.split("-").pop()?.toUpperCase() || "—";
 
   return (

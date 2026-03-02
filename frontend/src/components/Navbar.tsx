@@ -9,7 +9,6 @@ import {
   Settings,
   Menu,
   X,
-  Radio,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -32,10 +31,9 @@ function formatTime(date: Date): string {
 export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [time, setTime] = useState<string>("");
+  const [time, setTime] = useState<string>(() => formatTime(new Date()));
 
   useEffect(() => {
-    setTime(formatTime(new Date()));
     const interval = setInterval(() => {
       setTime(formatTime(new Date()));
     }, 1000);

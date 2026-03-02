@@ -34,12 +34,12 @@ export const mockLots: ParkingLot[] = [
 ];
 
 export const mockSlots: ParkingSlot[] = [
-  { id: "lot-a-slot-1", sensorId: "ESP32-01", status: "occupied", distanceCm: 8.4, lastUpdate: Math.floor(Date.now() / 1000) - 5, zone: "A" },
-  { id: "lot-a-slot-2", sensorId: "ESP32-01", status: "vacant", distanceCm: 124.2, lastUpdate: Math.floor(Date.now() / 1000) - 12, zone: "A" },
-  { id: "lot-a-slot-3", sensorId: "ESP32-01", status: "occupied", distanceCm: 6.1, lastUpdate: Math.floor(Date.now() / 1000) - 3, zone: "A" },
-  { id: "lot-a-slot-4", sensorId: "ESP32-02", status: "vacant", distanceCm: 89.7, lastUpdate: Math.floor(Date.now() / 1000) - 8, zone: "B" },
-  { id: "lot-a-slot-5", sensorId: "ESP32-02", status: "occupied", distanceCm: 11.3, lastUpdate: Math.floor(Date.now() / 1000) - 2, zone: "B" },
-  { id: "lot-a-slot-6", sensorId: "ESP32-02", status: "occupied", distanceCm: 7.8, lastUpdate: Math.floor(Date.now() / 1000) - 18, zone: "B" },
+  { id: "lot-a-slot-1", lotId: "lot-a", slotNumber: 1, sensorId: "ESP32-01", status: "occupied", distanceCm: 8.4, lastUpdate: Math.floor(Date.now() / 1000) - 5, zone: "A", zoneId: "zone-a" },
+  { id: "lot-a-slot-2", lotId: "lot-a", slotNumber: 2, sensorId: "ESP32-01", status: "vacant", distanceCm: 124.2, lastUpdate: Math.floor(Date.now() / 1000) - 12, zone: "A", zoneId: "zone-a" },
+  { id: "lot-a-slot-3", lotId: "lot-a", slotNumber: 3, sensorId: "ESP32-01", status: "occupied", distanceCm: 6.1, lastUpdate: Math.floor(Date.now() / 1000) - 3, zone: "A", zoneId: "zone-a" },
+  { id: "lot-a-slot-4", lotId: "lot-a", slotNumber: 4, sensorId: "ESP32-02", status: "vacant", distanceCm: 89.7, lastUpdate: Math.floor(Date.now() / 1000) - 8, zone: "B", zoneId: "zone-b" },
+  { id: "lot-a-slot-5", lotId: "lot-a", slotNumber: 5, sensorId: "ESP32-02", status: "occupied", distanceCm: 11.3, lastUpdate: Math.floor(Date.now() / 1000) - 2, zone: "B", zoneId: "zone-b" },
+  { id: "lot-a-slot-6", lotId: "lot-a", slotNumber: 6, sensorId: "ESP32-02", status: "occupied", distanceCm: 7.8, lastUpdate: Math.floor(Date.now() / 1000) - 18, zone: "B", zoneId: "zone-b" },
 ];
 
 export const mockStats: SystemStats = {

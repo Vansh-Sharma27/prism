@@ -1,10 +1,13 @@
 export interface ParkingSlot {
   id: string;
+  lotId: string;
+  slotNumber: number;
   sensorId: string;
   status: "vacant" | "occupied" | "offline";
   distanceCm: number;
   lastUpdate: number;
   zone?: string;
+  zoneId?: string | null;
 }
 
 export interface ParkingLot {
