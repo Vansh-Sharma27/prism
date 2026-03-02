@@ -31,7 +31,7 @@ function formatTime(date: Date): string {
 export function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [time, setTime] = useState<string>(() => formatTime(new Date()));
+  const [time, setTime] = useState<string>("--:--:--");
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -118,7 +118,9 @@ export function Navbar() {
               {/* System time */}
               <div className="flex items-center gap-2 font-mono text-sm">
                 <span className="text-[var(--text-muted)]">SYS</span>
-                <span className="text-[var(--accent)] tabular-nums font-semibold">{time}</span>
+                <span suppressHydrationWarning className="text-[var(--accent)] tabular-nums font-semibold">
+                  {time}
+                </span>
               </div>
 
               {/* Connection status - live pulsing indicator */}
@@ -173,7 +175,7 @@ export function Navbar() {
 
             {/* Mobile status */}
             <div className="px-4 py-3 border-t border-[var(--border-default)] flex items-center justify-between">
-              <span className="font-mono text-xs text-[var(--text-muted)]">
+              <span suppressHydrationWarning className="font-mono text-xs text-[var(--text-muted)]">
                 SYS {time}
               </span>
               <div className="flex items-center gap-2">

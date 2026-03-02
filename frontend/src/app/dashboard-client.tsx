@@ -17,8 +17,17 @@ const EMPTY_STATS = {
   vacantSlots: 0,
   offlineSlots: 0,
   occupancyRate: 0,
-  lastUpdate: Math.floor(Date.now() / 1000),
+  lastUpdate: 0,
 };
+
+function formatSyncTime(ts: number): string {
+  if (!ts) {
+    return "--:--";
+  }
+
+  // Render in UTC to avoid locale/timezone hydration drift.
+  return new Date(ts * 1000).toISOString().slice(11, 16);
+}
 
 export function DashboardClient() {
   const fetchFn = useCallback(() => fetchDashboardData(), []);
@@ -27,11 +36,7 @@ export function DashboardClient() {
   const lots = data?.lots || [];
   const slots = data?.slots || [];
   const stats = data?.stats || EMPTY_STATS;
-  const syncedAt = new Date(stats.lastUpdate * 1000).toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const syncedAt = formatSyncTime(stats.lastUpdate);
 
   const sensorDetail = stats.totalSlots > 0
     ? `${Math.max(stats.totalSlots - stats.offlineSlots, 0)}/${stats.totalSlots}`
@@ -48,7 +53,9 @@ export function DashboardClient() {
         >
           <div className="flex items-center gap-2 border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-1.5">
             <span className="font-mono text-xs text-[var(--text-muted)]">LAST SYNC</span>
-            <span className="ml-1 font-mono text-sm font-bold tabular-nums text-[var(--accent)]">{syncedAt}</span>
+            <span suppressHydrationWarning className="ml-1 font-mono text-sm font-bold tabular-nums text-[var(--accent)]">
+              {syncedAt}
+            </span>
           </div>
         </PageHeader>
 

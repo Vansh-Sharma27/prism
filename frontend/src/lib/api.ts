@@ -1,6 +1,6 @@
 import type { ParkingLot, ParkingSlot, SystemStats } from "@/types/parking";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const OFFLINE_THRESHOLD_SECONDS = 30;
 
 type SlotStatus = ParkingSlot["status"];
@@ -12,6 +12,11 @@ interface ApiLotsResponse {
 
 interface ApiSlotsResponse {
   slots: ApiSlot[];
+  total: number;
+}
+
+interface ApiEventsResponse {
+  events: ApiEvent[];
   total: number;
 }
 
@@ -40,6 +45,17 @@ interface ApiSlot {
   last_status_change?: string | null;
 }
 
+interface ApiEvent {
+  id: number;
+  event_type: "entry" | "exit";
+  timestamp: string | null;
+  slot_id: string;
+  slot_number: number | null;
+  lot_id: string | null;
+  lot_name: string | null;
+  sensor_distance_cm?: number | null;
+}
+
 export interface DashboardData {
   lots: ParkingLot[];
   slots: ParkingSlot[];
@@ -61,10 +77,42 @@ export interface ZoneSummary {
   offline: number;
 }
 
+export interface ActivityEvent {
+  id: number;
+  type: "entry" | "exit";
+  timestamp: number;
+  slot: string;
+  lot: string;
+}
+
+function getBearerToken(): string | null {
+  if (typeof window !== "undefined") {
+    const clientToken = window.localStorage.getItem("prism_access_token");
+    if (clientToken) {
+      return clientToken;
+    }
+  }
+
+  const envToken = process.env.NEXT_PUBLIC_API_TOKEN;
+  return envToken || null;
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
+  const token = getBearerToken();
+  const headers: HeadersInit = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+
   const res = await fetch(url, {
     cache: "no-store",
+    headers,
   });
+
+  if (res.status === 401) {
+    throw new Error(
+      "Unauthorized. Set prism_access_token in browser localStorage or NEXT_PUBLIC_API_TOKEN."
+    );
+  }
 
   if (!res.ok) {
     throw new Error(`Request failed (${res.status}) for ${url}`);
@@ -78,12 +126,29 @@ function parseTimestamp(value?: string | null): number {
     return Math.floor(Date.now() / 1000);
   }
 
-  const parsed = Date.parse(value);
+  // Backend emits naive ISO strings (no timezone); interpret them as UTC.
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+  const normalized = hasTimezone ? value : `${value}Z`;
+
+  const parsed = Date.parse(normalized);
   if (Number.isNaN(parsed)) {
     return Math.floor(Date.now() / 1000);
   }
 
   return Math.floor(parsed / 1000);
+}
+
+function formatSlotLabel(event: ApiEvent): string {
+  if (typeof event.slot_number === "number") {
+    return `S${event.slot_number.toString().padStart(2, "0")}`;
+  }
+
+  const match = event.slot_id.match(/slot-(\d+)$/);
+  if (match) {
+    return `S${match[1].padStart(2, "0")}`;
+  }
+
+  return event.slot_id.toUpperCase();
 }
 
 function deriveSensorId(slot: ApiSlot): string {
@@ -249,4 +314,16 @@ export async function fetchLotDetailData(lotId: string): Promise<LotDetailData> 
     slots: mappedSlots,
     zones: buildZoneSummary(mappedSlots),
   };
+}
+
+export async function fetchActivityEvents(limit = 120): Promise<ActivityEvent[]> {
+  const response = await fetchJson<ApiEventsResponse>(`${API_BASE}/events?limit=${limit}`);
+
+  return response.events.map((event) => ({
+    id: event.id,
+    type: event.event_type,
+    timestamp: parseTimestamp(event.timestamp) * 1000,
+    slot: formatSlotLabel(event),
+    lot: event.lot_name || event.lot_id || "Unknown",
+  }));
 }

@@ -27,11 +27,14 @@ src/
 │   ├── StatsGrid.tsx      # System status bar with progress indicator
 │   ├── LotCard.tsx        # Parking lot summary card
 │   ├── SlotCard.tsx       # Individual slot status card
+│   ├── SlotGrid.tsx       # Color-coded slot matrix for lot detail
 │   ├── PageHeader.tsx     # Shared page/section headers and StatCell
 │   ├── Skeleton.tsx       # Loading skeleton components
 │   └── EmptyState.tsx     # Empty state display
+├── hooks/
+│   └── usePolling.ts      # Shared auto-refresh polling hook
 ├── lib/
-│   ├── api.ts            # Backend API client (placeholder)
+│   ├── api.ts            # Live API adapters + auth-token aware fetch wrapper
 │   ├── format.ts         # Date/time formatting utilities
 │   └── mock-data.ts      # Mock data for development
 └── types/
@@ -70,10 +73,24 @@ Utility classes: `.card-industrial`, `.card-primary`, `.card-secondary`, `.statu
 
 ## Connecting to the Backend
 
-Set the API URL in `.env.local`:
+Set API and proxy values in `.env.local`:
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_API_URL=/api/v1
+PRISM_BACKEND_URL=http://127.0.0.1:5000
 ```
 
-The `src/lib/api.ts` file provides `fetchLots`, `fetchLot`, and `fetchSlots` functions. Pages currently use mock data from `src/lib/mock-data.ts` — swap imports to `api.ts` when the backend is running.
+If backend read endpoints require auth, set either:
+
+```bash
+# Option 1: env token for all browser sessions
+NEXT_PUBLIC_API_TOKEN=<jwt_token>
+```
+
+Or in browser devtools:
+
+```js
+localStorage.setItem("prism_access_token", "<jwt_token>")
+```
+
+The `src/lib/api.ts` file provides live API adapters (`fetchDashboardData`, `fetchLotDetailData`, `fetchActivityEvents`) consumed by dashboard, lots, lot-detail, and activity pages.
