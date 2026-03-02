@@ -1,7 +1,7 @@
 """
 Authentication routes for user registration and login.
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from marshmallow import ValidationError
 
@@ -20,10 +20,21 @@ def register():
     except ValidationError as err:
         return jsonify({"error": "Validation failed", "details": err.messages}), 400
 
-    if User.query.filter_by(email=data['email']).first():
+    email = data['email'].strip().lower()
+    requested_role = data.get('role', 'student')
+    allow_privileged = current_app.config.get('ALLOW_PRIVILEGED_SELF_REGISTER', False)
+
+    if requested_role != 'student' and not allow_privileged:
+        return jsonify({
+            "error": "Self-registration only supports student role"
+        }), 403
+
+    role = requested_role if allow_privileged else 'student'
+
+    if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-    user = User(email=data['email'], role=data.get('role', 'student'))
+    user = User(email=email, role=role)
     user.set_password(data['password'])
 
     db.session.add(user)

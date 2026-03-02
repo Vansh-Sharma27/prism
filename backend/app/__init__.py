@@ -49,6 +49,9 @@ def create_app(config_name=None):
     app.config['ALLOW_PUBLIC_READS'] = (
         os.getenv('PRISM_ALLOW_PUBLIC_READS', 'false').lower() == 'true'
     )
+    app.config['ALLOW_PRIVILEGED_SELF_REGISTER'] = (
+        os.getenv('PRISM_ALLOW_PRIVILEGED_SELF_REGISTER', 'false').lower() == 'true'
+    )
 
     # Initialize extensions
     db.init_app(app)
