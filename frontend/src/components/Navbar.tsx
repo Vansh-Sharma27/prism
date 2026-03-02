@@ -7,12 +7,15 @@ import {
   Car,
   Activity,
   Settings,
+  Shield,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth-context";
 
-const navItems = [
+const baseNavItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/lots", label: "Lots", icon: Car },
   { href: "/activity", label: "Activity", icon: Activity },
@@ -30,8 +33,12 @@ function formatTime(date: Date): string {
 
 export function Navbar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [time, setTime] = useState<string>("--:--:--");
+  const navItems = user?.role === "admin"
+    ? [...baseNavItems, { href: "/admin", label: "Admin", icon: Shield }]
+    : baseNavItems;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -133,6 +140,23 @@ export function Navbar() {
                   Live
                 </span>
               </div>
+
+              {user && (
+                <>
+                  <div className="h-5 w-px bg-[var(--border-default)]" />
+                  <span className="font-mono text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                    {user.role}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="inline-flex items-center gap-1 border border-[var(--border-default)] bg-[var(--bg-elevated)] px-2.5 py-1 text-[11px] font-display font-semibold uppercase tracking-wider text-[var(--text-secondary)] transition-colors hover:border-[var(--warning)] hover:text-[var(--warning)]"
+                  >
+                    <LogOut size={12} />
+                    Logout
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Button - minimum 44x44 touch target */}
@@ -174,14 +198,35 @@ export function Navbar() {
             </div>
 
             {/* Mobile status */}
-            <div className="px-4 py-3 border-t border-[var(--border-default)] flex items-center justify-between">
-              <span suppressHydrationWarning className="font-mono text-xs text-[var(--text-muted)]">
-                SYS {time}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="status-dot status-dot-vacant" />
-                <span className="font-mono text-xs text-[var(--vacant)]">LIVE</span>
+            <div className="px-4 py-3 border-t border-[var(--border-default)] space-y-3">
+              <div className="flex items-center justify-between">
+                <span suppressHydrationWarning className="font-mono text-xs text-[var(--text-muted)]">
+                  SYS {time}
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="status-dot status-dot-vacant" />
+                  <span className="font-mono text-xs text-[var(--vacant)]">LIVE</span>
+                </div>
               </div>
+
+              {user && (
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs uppercase tracking-wider text-[var(--text-muted)]">
+                    {user.role}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      logout();
+                    }}
+                    className="inline-flex items-center gap-1 border border-[var(--border-default)] bg-[var(--bg-elevated)] px-2.5 py-1 text-[11px] font-display font-semibold uppercase tracking-wider text-[var(--text-secondary)] transition-colors hover:border-[var(--warning)] hover:text-[var(--warning)]"
+                  >
+                    <LogOut size={12} />
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

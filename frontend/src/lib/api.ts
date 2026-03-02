@@ -2,6 +2,7 @@ import type { ParkingLot, ParkingSlot, SystemStats } from "@/types/parking";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const OFFLINE_THRESHOLD_SECONDS = 30;
+export const AUTH_TOKEN_STORAGE_KEY = "prism_access_token";
 
 type SlotStatus = ParkingSlot["status"];
 
@@ -18,6 +19,25 @@ interface ApiSlotsResponse {
 interface ApiEventsResponse {
   events: ApiEvent[];
   total: number;
+}
+
+interface ApiAuthResponse {
+  access_token: string;
+  user: AuthUser;
+}
+
+interface ApiRegisterResponse {
+  message: string;
+  user: AuthUser;
+}
+
+interface ApiCurrentUserResponse {
+  user: AuthUser;
+}
+
+interface ApiErrorResponse {
+  error?: string;
+  details?: unknown;
 }
 
 interface ApiLot {
@@ -85,9 +105,53 @@ export interface ActivityEvent {
   lot: string;
 }
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: "student" | "faculty" | "admin";
+  created_at?: string;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+}
+
+async function parseApiErrorMessage(res: Response): Promise<string> {
+  let defaultMessage = `Request failed (${res.status})`;
+  if (res.status === 401) {
+    defaultMessage = "Authentication required.";
+  } else if (res.status === 403) {
+    defaultMessage = "Permission denied.";
+  }
+
+  try {
+    const payload = (await res.json()) as ApiErrorResponse;
+    if (typeof payload.error === "string" && payload.error.trim().length > 0) {
+      return payload.error;
+    }
+
+    if (payload.details && typeof payload.details === "object") {
+      const flat = JSON.stringify(payload.details);
+      if (flat.length > 0) {
+        return `${defaultMessage} ${flat}`;
+      }
+    }
+  } catch {
+    // Ignore parse failures and return generic message.
+  }
+
+  return defaultMessage;
+}
+
 function getBearerToken(): string | null {
   if (typeof window !== "undefined") {
-    const clientToken = window.localStorage.getItem("prism_access_token");
+    const clientToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
     if (clientToken) {
       return clientToken;
     }
@@ -97,28 +161,60 @@ function getBearerToken(): string | null {
   return envToken || null;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const token = getBearerToken();
-  const headers: HeadersInit = token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
-
+  const baseHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+  const headers: HeadersInit = {
+    ...baseHeaders,
+    ...(init?.headers || {}),
+  };
   const res = await fetch(url, {
     cache: "no-store",
+    ...init,
     headers,
   });
 
   if (res.status === 401) {
-    throw new Error(
-      "Unauthorized. Set prism_access_token in browser localStorage or NEXT_PUBLIC_API_TOKEN."
-    );
+    throw new Error("Unauthorized. Please login again.");
   }
 
   if (!res.ok) {
-    throw new Error(`Request failed (${res.status}) for ${url}`);
+    const message = await parseApiErrorMessage(res);
+    throw new Error(`${message} (${url})`);
   }
 
   return res.json() as Promise<T>;
+}
+
+export async function loginUser(payload: LoginPayload): Promise<{
+  accessToken: string;
+  user: AuthUser;
+}> {
+  const response = await fetchJson<ApiAuthResponse>(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return {
+    accessToken: response.access_token,
+    user: response.user,
+  };
+}
+
+export async function registerUser(payload: RegisterPayload): Promise<AuthUser> {
+  const response = await fetchJson<ApiRegisterResponse>(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  return response.user;
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser> {
+  const response = await fetchJson<ApiCurrentUserResponse>(`${API_BASE}/auth/me`);
+  return response.user;
 }
 
 function parseTimestamp(value?: string | null): number {

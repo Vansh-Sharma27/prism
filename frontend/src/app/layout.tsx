@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Barlow, IBM_Plex_Mono } from "next/font/google";
+import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
 
 const barlowCondensed = Barlow_Condensed({
@@ -40,21 +41,23 @@ export default function RootLayout({
       <body
         className={`${barlowCondensed.variable} ${barlow.variable} ${ibmPlexMono.variable} antialiased`}
       >
-        {/* Skip link for keyboard navigation */}
-        <a href="#main-content" className="skip-link">
-          Skip to main content
-        </a>
+        <AuthProvider>
+          {/* Skip link for keyboard navigation */}
+          <a href="#main-content" className="skip-link">
+            Skip to main content
+          </a>
 
-        {/* Live region for screen reader announcements */}
-        <div
-          id="live-region"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          className="sr-only"
-        />
+          {/* Live region for screen reader announcements */}
+          <div
+            id="live-region"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="sr-only"
+          />
 
-        {children}
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

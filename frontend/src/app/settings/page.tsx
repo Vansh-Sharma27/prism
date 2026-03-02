@@ -2,102 +2,105 @@
 
 import { Navbar } from "@/components/Navbar";
 import { PageHeader } from "@/components/PageHeader";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Server, Wifi, Database, Bell, Shield, Cpu, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 export default function SettingsPage() {
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
-      <Navbar />
+    <ProtectedRoute>
+      <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
+        <Navbar />
 
-      <main id="main-content" className="mx-auto max-w-7xl px-4 pt-24 pb-16 sm:px-6">
-        <PageHeader
-          title="System Configuration"
-          subtitle="Manage connections, sensors, and system settings"
-        />
+        <main id="main-content" className="mx-auto max-w-7xl px-4 pt-24 pb-16 sm:px-6">
+          <PageHeader
+            title="System Configuration"
+            subtitle="Manage connections, sensors, and system settings"
+          />
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ConfigCard
-            icon={Server}
-            title="MQTT Broker"
-            description="Message queue connection settings"
-            status="Connected"
-            statusColor="var(--vacant)"
-            details={[
-              { label: "Host", value: "localhost:1883" },
-              { label: "Protocol", value: "MQTT 3.1.1" },
-              { label: "Keepalive", value: "60s" },
-              { label: "QoS", value: "1" },
-            ]}
-          />
-          <ConfigCard
-            icon={Database}
-            title="Database"
-            description="PostgreSQL connection and health"
-            status="Healthy"
-            statusColor="var(--vacant)"
-            details={[
-              { label: "Host", value: "localhost:5432" },
-              { label: "DB", value: "prism_db" },
-              { label: "Pool Size", value: "10" },
-              { label: "Latency", value: "2ms" },
-            ]}
-          />
-          <ConfigCard
-            icon={Wifi}
-            title="Sensor Network"
-            description="ESP32 nodes and connectivity"
-            status="5/6 Online"
-            statusColor="var(--warning)"
-            details={[
-              { label: "Nodes", value: "2 active" },
-              { label: "Sensors", value: "6 total" },
-              { label: "Offline", value: "1 (ESP32-03)" },
-              { label: "Avg RSSI", value: "-47 dBm" },
-            ]}
-          />
-          <ConfigCard
-            icon={Cpu}
-            title="Processing"
-            description="Backend API and ML services"
-            status="Running"
-            statusColor="var(--vacant)"
-            details={[
-              { label: "API", value: "Flask 3.0" },
-              { label: "Workers", value: "4 threads" },
-              { label: "Uptime", value: "3d 14h" },
-              { label: "Memory", value: "142 MB" },
-            ]}
-          />
-          <ConfigCard
-            icon={Bell}
-            title="Alerts"
-            description="Notification settings"
-            status="Enabled"
-            statusColor="var(--accent)"
-            details={[
-              { label: "Email", value: "Off" },
-              { label: "Webhook", value: "Off" },
-              { label: "Threshold", value: "90%" },
-              { label: "Cooldown", value: "5 min" },
-            ]}
-          />
-          <ConfigCard
-            icon={Shield}
-            title="Security"
-            description="Authentication and access"
-            status="Secured"
-            statusColor="var(--vacant)"
-            details={[
-              { label: "Auth", value: "JWT" },
-              { label: "SSL", value: "Enabled" },
-              { label: "CORS", value: "Restricted" },
-              { label: "Rate Limit", value: "100/min" },
-            ]}
-          />
-        </div>
-      </main>
-    </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ConfigCard
+              icon={Server}
+              title="MQTT Broker"
+              description="Message queue connection settings"
+              status="Connected"
+              statusColor="var(--vacant)"
+              details={[
+                { label: "Host", value: "localhost:1883" },
+                { label: "Protocol", value: "MQTT 3.1.1" },
+                { label: "Keepalive", value: "60s" },
+                { label: "QoS", value: "1" },
+              ]}
+            />
+            <ConfigCard
+              icon={Database}
+              title="Database"
+              description="PostgreSQL connection and health"
+              status="Healthy"
+              statusColor="var(--vacant)"
+              details={[
+                { label: "Host", value: "localhost:5432" },
+                { label: "DB", value: "prism_db" },
+                { label: "Pool Size", value: "10" },
+                { label: "Latency", value: "2ms" },
+              ]}
+            />
+            <ConfigCard
+              icon={Wifi}
+              title="Sensor Network"
+              description="ESP32 nodes and connectivity"
+              status="5/6 Online"
+              statusColor="var(--warning)"
+              details={[
+                { label: "Nodes", value: "2 active" },
+                { label: "Sensors", value: "6 total" },
+                { label: "Offline", value: "1 (ESP32-03)" },
+                { label: "Avg RSSI", value: "-47 dBm" },
+              ]}
+            />
+            <ConfigCard
+              icon={Cpu}
+              title="Processing"
+              description="Backend API and ML services"
+              status="Running"
+              statusColor="var(--vacant)"
+              details={[
+                { label: "API", value: "Flask 3.0" },
+                { label: "Workers", value: "4 threads" },
+                { label: "Uptime", value: "3d 14h" },
+                { label: "Memory", value: "142 MB" },
+              ]}
+            />
+            <ConfigCard
+              icon={Bell}
+              title="Alerts"
+              description="Notification settings"
+              status="Enabled"
+              statusColor="var(--accent)"
+              details={[
+                { label: "Email", value: "Off" },
+                { label: "Webhook", value: "Off" },
+                { label: "Threshold", value: "90%" },
+                { label: "Cooldown", value: "5 min" },
+              ]}
+            />
+            <ConfigCard
+              icon={Shield}
+              title="Security"
+              description="Authentication and access"
+              status="Secured"
+              statusColor="var(--vacant)"
+              details={[
+                { label: "Auth", value: "JWT" },
+                { label: "SSL", value: "Enabled" },
+                { label: "CORS", value: "Restricted" },
+                { label: "Rate Limit", value: "100/min" },
+              ]}
+            />
+          </div>
+        </main>
+      </div>
+    </ProtectedRoute>
   );
 }
 

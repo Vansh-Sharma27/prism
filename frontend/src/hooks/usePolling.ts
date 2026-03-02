@@ -1,25 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface PollingState<T> {
   data: T | null;
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   refreshedAt: number | null;
+  retry: () => void;
 }
 
 export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): PollingState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const hasFetchedAtLeastOnce = useRef(false);
+
+  const retry = useCallback(() => {
+    setRetryNonce((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const poll = async () => {
+      const initialLoad = !hasFetchedAtLeastOnce.current;
+      if (initialLoad) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+
       try {
         const result = await fetchFn();
         if (!mounted) {
@@ -38,7 +54,9 @@ export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): Po
         setError(message);
       } finally {
         if (mounted) {
+          hasFetchedAtLeastOnce.current = true;
           setLoading(false);
+          setRefreshing(false);
           timeoutId = setTimeout(poll, intervalMs);
         }
       }
@@ -52,7 +70,7 @@ export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): Po
         clearTimeout(timeoutId);
       }
     };
-  }, [fetchFn, intervalMs]);
+  }, [fetchFn, intervalMs, retryNonce]);
 
-  return { data, loading, error, refreshedAt };
+  return { data, loading, refreshing, error, refreshedAt, retry };
 }

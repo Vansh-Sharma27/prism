@@ -15,15 +15,19 @@ Next.js dashboard for real-time parking slot monitoring. Displays sensor data fr
 src/
 ├── app/                  # Next.js App Router pages
 │   ├── page.tsx          # Dashboard — stats, lot cards, live slot grid
+│   ├── login/page.tsx    # Login form (validation + redirect)
+│   ├── register/page.tsx # Registration form (validation + auto-login)
 │   ├── lots/
 │   │   ├── page.tsx      # All parking lots
 │   │   └── [id]/page.tsx # Lot detail with slot-level view
 │   ├── activity/page.tsx # Event log (entries/exits)
+│   ├── admin/page.tsx    # Admin skeleton (sensor health + chart placeholders)
 │   ├── settings/page.tsx # System configuration display
 │   ├── globals.css       # Design tokens and utility classes
 │   └── layout.tsx        # Root layout with fonts and metadata
 ├── components/           # Shared UI components
 │   ├── Navbar.tsx         # Navigation bar with system clock
+│   ├── ProtectedRoute.tsx # Auth + role gate for protected pages
 │   ├── StatsGrid.tsx      # System status bar with progress indicator
 │   ├── LotCard.tsx        # Parking lot summary card
 │   ├── SlotCard.tsx       # Individual slot status card
@@ -35,6 +39,7 @@ src/
 │   └── usePolling.ts      # Shared auto-refresh polling hook
 ├── lib/
 │   ├── api.ts            # Live API adapters + auth-token aware fetch wrapper
+│   ├── auth-context.tsx  # Auth provider and session lifecycle
 │   ├── format.ts         # Date/time formatting utilities
 │   └── mock-data.ts      # Mock data for development
 └── types/
@@ -80,7 +85,14 @@ NEXT_PUBLIC_API_URL=/api/v1
 PRISM_BACKEND_URL=http://127.0.0.1:5000
 ```
 
-If backend read endpoints require auth, set either:
+The frontend now includes Day 6 auth pages:
+
+- `GET /login`
+- `GET /register`
+
+Successful login stores JWT in `localStorage["prism_access_token"]`. Protected pages (`/`, `/lots`, `/lots/[id]`, `/activity`, `/settings`, `/admin`) enforce client-side auth via `ProtectedRoute`.
+
+If backend read endpoints require auth and you want to bypass login UI in local testing, set either:
 
 ```bash
 # Option 1: env token for all browser sessions
