@@ -2,6 +2,7 @@
 PRISM Backend Application Factory
 """
 import os
+import secrets
 from datetime import timedelta
 from flask import Flask
 from flask_cors import CORS
@@ -17,24 +18,52 @@ jwt = JWTManager()
 def create_app(config_name=None):
     """Application factory pattern."""
     app = Flask(__name__)
-    
+
     # Load configuration
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
+    secret_key = os.getenv('SECRET_KEY')
+    if not secret_key:
+        secret_key = secrets.token_urlsafe(48)
+        app.logger.warning(
+            "SECRET_KEY not set; generated ephemeral key for this process. "
+            "Set SECRET_KEY in environment for stable production security."
+        )
+
+    jwt_secret = os.getenv('JWT_SECRET_KEY')
+    if not jwt_secret:
+        jwt_secret = secrets.token_urlsafe(48)
+        app.logger.warning(
+            "JWT_SECRET_KEY not set; generated ephemeral key for this process. "
+            "Set JWT_SECRET_KEY in environment for stable token verification."
+        )
+
+    app.config['SECRET_KEY'] = secret_key
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
         'DATABASE_URL', 
         'sqlite:///prism_dev.db'
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', app.config['SECRET_KEY'])
+    app.config['JWT_SECRET_KEY'] = jwt_secret
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(
         hours=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 24))
+    )
+    app.config['ALLOW_PUBLIC_READS'] = (
+        os.getenv('PRISM_ALLOW_PUBLIC_READS', 'false').lower() == 'true'
     )
 
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    CORS(app)
+
+    allowed_origins = [
+        origin.strip()
+        for origin in os.getenv(
+            'CORS_ALLOWED_ORIGINS',
+            'http://localhost:3000,http://127.0.0.1:3000'
+        ).split(',')
+        if origin.strip()
+    ]
+    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 
     # Register blueprints
     from app.routes.health import health_bp
