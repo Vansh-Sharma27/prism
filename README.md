@@ -8,8 +8,11 @@ Parking Resource Intelligence and Slot Management (PRISM) is a smart parking sys
 - SQLAlchemy models for users, lots, zones, slots, and occupancy logging
 - MQTT subscriber service for sensor data ingestion
 - Next.js dashboard with real-time slot monitoring UI
+- JWT authentication flow (register/login/me) with protected frontend routes
+- Admin dashboard skeleton for sensor-health monitoring
 - Arduino/ESP32 firmware for ultrasonic distance sensors
 - Multi-sensor simulation for TinkerCAD validation
+- Enhanced simulator with day-part occupancy patterns, outage simulation, and dataset export tooling
 
 ## Repository Structure
 
@@ -47,6 +50,11 @@ prism/
 - `GET /`
 - `GET /health`
 
+### Auth
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
+
 ### Lots
 - `GET /api/v1/lots`
 - `POST /api/v1/lots`
@@ -58,6 +66,7 @@ prism/
 - `GET /api/v1/slots/<slot_id>`
 - `PUT /api/v1/slots/<slot_id>/status`
 - `GET /api/v1/slots/<slot_id>/events`
+- `GET /api/v1/events`
 
 ## MQTT Topic Contract
 
@@ -75,6 +84,7 @@ Topic conventions are documented in [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
 - Hardware assembly guide: [`docs/hardware_assembly_guide.md`](docs/hardware_assembly_guide.md)
 - Wiring diagrams: [`docs/wiring_diagram.md`](docs/wiring_diagram.md)
 - Day 5 simulator integration report: [`docs/day5_full_stack_simulator_test.md`](docs/day5_full_stack_simulator_test.md)
+- Day 6 implementation report: [`docs/day6_auth_simulator_report.md`](docs/day6_auth_simulator_report.md)
 
 ## Quick Start
 
