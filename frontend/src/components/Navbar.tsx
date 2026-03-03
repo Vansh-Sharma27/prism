@@ -58,7 +58,7 @@ export function Navbar() {
               className="flex items-center gap-3 group focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]"
             >
               {/* Industrial prism icon */}
-              <div className="relative flex h-9 w-9 items-center justify-center border border-[var(--accent)]/60 bg-[var(--bg-elevated)] transition-all group-hover:border-[var(--accent)] group-hover:shadow-[0_0_12px_rgba(245,158,11,0.3)]">
+              <div className="relative flex h-9 w-9 items-center justify-center border border-[var(--accent)]/60 bg-[var(--bg-elevated)] transition-[border-color,box-shadow] duration-200 group-hover:border-[var(--accent)] group-hover:shadow-[0_0_12px_rgba(245,158,11,0.3)]">
                 <svg viewBox="0 0 32 32" className="h-6 w-6 transition-transform group-hover:scale-110">
                   <polygon
                     points="16,4 28,26 4,26"
@@ -106,7 +106,7 @@ export function Navbar() {
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold uppercase tracking-wider transition-all font-display focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] ${
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold uppercase tracking-wider transition-colors duration-200 font-display focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)] ${
                       isActive
                         ? "bg-[var(--accent)] text-[var(--bg-primary)]"
                         : "text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--accent)]"
@@ -150,7 +150,7 @@ export function Navbar() {
                   <button
                     type="button"
                     onClick={logout}
-                    className="inline-flex items-center gap-1 border border-[var(--border-default)] bg-[var(--bg-elevated)] px-2.5 py-1 text-[11px] font-display font-semibold uppercase tracking-wider text-[var(--text-secondary)] transition-colors hover:border-[var(--warning)] hover:text-[var(--warning)]"
+                    className="inline-flex min-h-11 items-center gap-1.5 border border-[var(--border-default)] bg-[var(--bg-elevated)] px-3 py-2 text-xs font-display font-semibold uppercase tracking-wider text-[var(--text-secondary)] transition-colors duration-200 hover:border-[var(--warning)] hover:text-[var(--warning)]"
                   >
                     <LogOut size={12} />
                     Logout
@@ -220,7 +220,7 @@ export function Navbar() {
                       setMobileOpen(false);
                       logout();
                     }}
-                    className="inline-flex items-center gap-1 border border-[var(--border-default)] bg-[var(--bg-elevated)] px-2.5 py-1 text-[11px] font-display font-semibold uppercase tracking-wider text-[var(--text-secondary)] transition-colors hover:border-[var(--warning)] hover:text-[var(--warning)]"
+                    className="inline-flex min-h-11 items-center gap-1.5 border border-[var(--border-default)] bg-[var(--bg-elevated)] px-3 py-2 text-xs font-display font-semibold uppercase tracking-wider text-[var(--text-secondary)] transition-colors duration-200 hover:border-[var(--warning)] hover:text-[var(--warning)]"
                   >
                     <LogOut size={12} />
                     Logout

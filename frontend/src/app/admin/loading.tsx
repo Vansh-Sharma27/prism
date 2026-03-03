@@ -9,9 +9,25 @@ export default function AdminLoading() {
           <div className="skeleton h-4 w-64" />
         </div>
 
-        <div className="mb-8 space-y-2">
+        <div className="mb-8 hidden space-y-2 md:block">
           {[1, 2, 3].map((item) => (
             <div key={item} className="skeleton h-12 border border-[var(--border-subtle)]" />
+          ))}
+        </div>
+
+        <div className="mb-8 space-y-2 md:hidden">
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="border border-[var(--border-subtle)] bg-[var(--bg-secondary)] p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-3 w-12" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="skeleton h-10" />
+                <div className="skeleton h-10" />
+              </div>
+              <div className="skeleton h-10 mt-2" />
+            </div>
           ))}
         </div>
 

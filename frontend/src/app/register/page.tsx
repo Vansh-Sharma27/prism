@@ -16,6 +16,11 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
@@ -27,23 +32,36 @@ export default function RegisterPage() {
     event.preventDefault();
 
     const normalizedEmail = email.trim().toLowerCase();
+    const nextFieldErrors: {
+      email?: string;
+      password?: string;
+      confirmPassword?: string;
+    } = {};
 
     if (!EMAIL_RE.test(normalizedEmail)) {
-      setError("Enter a valid email address.");
-      return;
+      nextFieldErrors.email = "Email address needs a valid format. Example: user@domain.com";
     }
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
+      nextFieldErrors.password = "Password must be at least 8 characters.";
     }
 
     if (password !== confirmPassword) {
-      setError("Password and confirm password do not match.");
+      nextFieldErrors.confirmPassword = "Confirm password must match password.";
+    }
+
+    if (
+      nextFieldErrors.email ||
+      nextFieldErrors.password ||
+      nextFieldErrors.confirmPassword
+    ) {
+      setFieldErrors(nextFieldErrors);
+      setError(null);
       return;
     }
 
     setSubmitting(true);
+    setFieldErrors({});
     setError(null);
 
     try {
@@ -62,7 +80,7 @@ export default function RegisterPage() {
         <section className="w-full border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6 sm:p-8">
           <div className="mb-6">
             <p className="font-mono text-xs uppercase tracking-widest text-[var(--accent)]">PRISM Auth</p>
-            <h1 className="mt-2 font-display text-2xl font-semibold uppercase tracking-wider text-[var(--text-primary)]">
+            <h1 className="text-fluid-display-md mt-2 font-display font-semibold uppercase tracking-wider text-[var(--text-primary)] leading-[1.08]">
               Register
             </h1>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
@@ -86,10 +104,20 @@ export default function RegisterPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFieldErrors((current) => ({ ...current, email: undefined }));
+                }}
                 className="w-full border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? "register-email-error" : undefined}
                 required
               />
+              {fieldErrors.email && (
+                <p id="register-email-error" className="mt-1 text-xs text-[var(--warning)]">
+                  {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div>
@@ -101,11 +129,21 @@ export default function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setFieldErrors((current) => ({ ...current, password: undefined }));
+                }}
                 className="w-full border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? "register-password-error" : undefined}
                 required
                 minLength={8}
               />
+              {fieldErrors.password && (
+                <p id="register-password-error" className="mt-1 text-xs text-[var(--warning)]">
+                  {fieldErrors.password}
+                </p>
+              )}
             </div>
 
             <div>
@@ -117,11 +155,29 @@ export default function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  setFieldErrors((current) => ({
+                    ...current,
+                    confirmPassword: undefined,
+                  }));
+                }}
                 className="w-full border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+                aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                aria-describedby={
+                  fieldErrors.confirmPassword ? "register-confirm-password-error" : undefined
+                }
                 required
                 minLength={8}
               />
+              {fieldErrors.confirmPassword && (
+                <p
+                  id="register-confirm-password-error"
+                  className="mt-1 text-xs text-[var(--warning)]"
+                >
+                  {fieldErrors.confirmPassword}
+                </p>
+              )}
             </div>
 
             <button

@@ -11,11 +11,11 @@ export function PageHeader({ title, subtitle, children }: PageHeaderProps) {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <div className="h-6 w-1.5 bg-[var(--accent)]" />
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold uppercase tracking-wider text-[var(--text-primary)] font-display">
+            <h1 className="text-fluid-display-lg font-bold uppercase tracking-wider text-[var(--text-primary)] font-display leading-[1.04]">
               {title}
             </h1>
           </div>
-          <p className="ml-[18px] text-sm text-[var(--text-secondary)]">
+          <p className="text-fluid-sm ml-[18px] text-[var(--text-secondary)]">
             {subtitle}
           </p>
         </div>
@@ -37,15 +37,15 @@ export function SectionHeader({ title, count, subtitle }: SectionHeaderProps) {
     <div className="mb-4 flex items-center justify-between border-b border-[var(--border-default)] pb-3">
       <div className="flex items-center gap-3">
         <div className="h-4 w-1 bg-[var(--accent)]" />
-        <h2 className="text-lg font-bold uppercase tracking-wider text-[var(--text-primary)] font-display">
+        <h2 className="text-fluid-display-sm font-bold uppercase tracking-wider text-[var(--text-primary)] font-display leading-[1.08]">
           {title}
         </h2>
         {subtitle && (
-          <span className="text-sm text-[var(--text-muted)]">/ {subtitle}</span>
+          <span className="text-fluid-sm text-[var(--text-muted)]">/ {subtitle}</span>
         )}
       </div>
       {count !== undefined && (
-        <span className="font-mono text-sm text-[var(--accent)]">
+        <span className="font-mono text-fluid-sm text-[var(--accent)]">
           [{count.toString().padStart(2, "0")}]
         </span>
       )}
@@ -62,9 +62,9 @@ interface StatCellProps {
 
 export function StatCell({ label, value, color, size = "md" }: StatCellProps) {
   const sizeClasses = {
-    sm: "text-lg",
-    md: "text-2xl",
-    lg: "text-3xl",
+    sm: "text-fluid-base",
+    md: "text-fluid-display-sm",
+    lg: "text-fluid-display-md",
   };
 
   return (
@@ -75,7 +75,7 @@ export function StatCell({ label, value, color, size = "md" }: StatCellProps) {
       >
         {typeof value === "number" ? value.toString().padStart(2, "0") : value}
       </div>
-      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] font-display">
+      <div className="text-fluid-xs mt-0.5 font-semibold uppercase tracking-wider text-[var(--text-muted)] font-display">
         {label}
       </div>
     </div>

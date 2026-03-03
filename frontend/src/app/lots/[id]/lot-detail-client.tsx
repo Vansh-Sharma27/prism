@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback } from "react";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/AppShell";
 import { SlotCard } from "@/components/SlotCard";
 import { SlotGrid } from "@/components/SlotGrid";
 import { SectionHeader, StatCell } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { PollingNotice } from "@/components/PollingNotice";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { fetchLotDetailData } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
@@ -34,10 +35,7 @@ export function LotDetailClient({ lotId }: LotDetailClientProps) {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
-        <Navbar />
-
-        <main id="main-content" className="mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6">
+      <AppShell>
           <nav aria-label="Breadcrumb" className="mb-4">
             <Link
               href="/lots"
@@ -67,18 +65,10 @@ export function LotDetailClient({ lotId }: LotDetailClientProps) {
           </div>
 
           {error && (
-            <div className="mb-6 border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>API poll warning: {error}</span>
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="border border-[var(--warning)]/50 px-3 py-1 text-xs font-display font-semibold uppercase tracking-wider transition-colors hover:bg-[var(--warning)]/15"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
+            <PollingNotice
+              message={`API poll warning: ${error}`}
+              actions={[{ label: "Retry", onClick: retry }]}
+            />
           )}
 
           <div className="mb-6 border border-[var(--border-default)] bg-[var(--bg-secondary)]">
@@ -107,23 +97,56 @@ export function LotDetailClient({ lotId }: LotDetailClientProps) {
           <section className="mb-8" aria-label="Zone-level breakdown">
             <SectionHeader title="Zone Breakdown" count={zones.length} />
             {zones.length > 0 ? (
-              <div className="overflow-hidden border border-[var(--border-default)] bg-[var(--bg-secondary)]">
-                <div className="grid grid-cols-5 border-b border-[var(--border-default)] bg-[var(--bg-tertiary)] px-4 py-3 font-display text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-                  <span>Zone</span>
-                  <span className="text-center">Total</span>
-                  <span className="text-center">Vacant</span>
-                  <span className="text-center">Occupied</span>
-                  <span className="text-center">Offline</span>
-                </div>
-                {zones.map((zone) => (
-                  <div key={zone.id} className="grid grid-cols-5 border-b border-[var(--border-subtle)] px-4 py-3 font-mono text-sm last:border-b-0">
-                    <span className="font-display font-semibold uppercase tracking-wider text-[var(--text-primary)]">{zone.name}</span>
-                    <span className="text-center text-[var(--text-primary)]">{zone.total}</span>
-                    <span className="text-center text-[var(--vacant)]">{zone.vacant}</span>
-                    <span className="text-center text-[var(--occupied)]">{zone.occupied}</span>
-                    <span className="text-center text-[var(--offline)]">{zone.offline}</span>
+              <div className="space-y-3">
+                <div className="hidden overflow-hidden border border-[var(--border-default)] bg-[var(--bg-secondary)] md:block">
+                  <div className="grid grid-cols-5 border-b border-[var(--border-default)] bg-[var(--bg-tertiary)] px-4 py-3 font-display text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                    <span>Zone</span>
+                    <span className="text-center">Total</span>
+                    <span className="text-center">Vacant</span>
+                    <span className="text-center">Occupied</span>
+                    <span className="text-center">Offline</span>
                   </div>
-                ))}
+                  {zones.map((zone) => (
+                    <div key={zone.id} className="grid grid-cols-5 border-b border-[var(--border-subtle)] px-4 py-3 font-mono text-sm last:border-b-0">
+                      <span className="font-display font-semibold uppercase tracking-wider text-[var(--text-primary)]">{zone.name}</span>
+                      <span className="text-center text-[var(--text-primary)]">{zone.total}</span>
+                      <span className="text-center text-[var(--vacant)]">{zone.vacant}</span>
+                      <span className="text-center text-[var(--occupied)]">{zone.occupied}</span>
+                      <span className="text-center text-[var(--offline)]">{zone.offline}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2 md:hidden">
+                  {zones.map((zone) => (
+                    <article
+                      key={zone.id}
+                      className="border border-[var(--border-default)] bg-[var(--bg-secondary)] p-3"
+                    >
+                      <h3 className="font-display text-sm font-semibold uppercase tracking-wider text-[var(--text-primary)]">
+                        {zone.name}
+                      </h3>
+                      <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-2.5 py-2">
+                          <dt className="label-quiet">Total</dt>
+                          <dd className="font-mono text-[var(--text-primary)]">{zone.total}</dd>
+                        </div>
+                        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-2.5 py-2">
+                          <dt className="label-quiet">Vacant</dt>
+                          <dd className="font-mono text-[var(--vacant)]">{zone.vacant}</dd>
+                        </div>
+                        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-2.5 py-2">
+                          <dt className="label-quiet">Occupied</dt>
+                          <dd className="font-mono text-[var(--occupied)]">{zone.occupied}</dd>
+                        </div>
+                        <div className="rounded-sm border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-2.5 py-2">
+                          <dt className="label-quiet">Offline</dt>
+                          <dd className="font-mono text-[var(--offline)]">{zone.offline}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
               </div>
             ) : (
               <EmptyState
@@ -171,8 +194,7 @@ export function LotDetailClient({ lotId }: LotDetailClientProps) {
               />
             )}
           </section>
-        </main>
-      </div>
+      </AppShell>
     </ProtectedRoute>
   );
 }

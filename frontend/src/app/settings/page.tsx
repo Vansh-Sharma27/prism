@@ -1,6 +1,6 @@
 "use client";
 
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Server, Wifi, Database, Bell, Shield, Cpu, ChevronDown } from "lucide-react";
@@ -9,14 +9,18 @@ import { useState } from "react";
 export default function SettingsPage() {
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
-        <Navbar />
-
-        <main id="main-content" className="mx-auto max-w-7xl px-4 pt-24 pb-16 sm:px-6">
+      <AppShell mainClassName="mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6">
           <PageHeader
             title="System Configuration"
             subtitle="Manage connections, sensors, and system settings"
           />
+
+          <div className="mb-4 border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+            <p>
+              Read-only snapshot: this page shows current configuration references and guardrails,
+              not live backend health telemetry.
+            </p>
+          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <ConfigCard
@@ -98,8 +102,7 @@ export default function SettingsPage() {
               ]}
             />
           </div>
-        </main>
-      </div>
+      </AppShell>
     </ProtectedRoute>
   );
 }
@@ -124,14 +127,14 @@ function ConfigCard({
   const detailsId = `config-details-${title.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
-    <div className="border border-[var(--border-default)] bg-[var(--bg-secondary)] transition-all duration-200 hover:border-[var(--accent)]/50 group animate-scale-in">
+    <div className="group animate-scale-in border border-[var(--border-default)] bg-[var(--bg-secondary)] transition-[border-color,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-[var(--accent)]/50">
       {/* Top accent */}
-      <div className="h-1 transition-all group-hover:h-1.5" style={{ backgroundColor: statusColor }} />
+      <div className="h-1 transition-opacity duration-200 group-hover:opacity-90" style={{ backgroundColor: statusColor }} />
 
       <div className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 items-center justify-center border border-[var(--border-default)] bg-[var(--bg-tertiary)] transition-all group-hover:border-[var(--accent)]/30 group-hover:bg-[var(--bg-elevated)]">
+            <div className="flex h-10 w-10 items-center justify-center border border-[var(--border-default)] bg-[var(--bg-tertiary)] transition-[border-color,background-color] duration-200 group-hover:border-[var(--accent)]/30 group-hover:bg-[var(--bg-elevated)]">
               <Icon size={20} className="text-[var(--accent)]" />
             </div>
             <div>
@@ -161,7 +164,7 @@ function ConfigCard({
           {visibleDetails.map((detail) => (
             <div
               key={detail.label}
-              className="flex items-center justify-between px-3 py-2 bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] transition-all hover:border-[var(--border-default)]"
+              className="flex items-center justify-between border border-[var(--border-subtle)] bg-[var(--bg-tertiary)] px-3 py-2 transition-colors duration-200 hover:border-[var(--border-default)]"
             >
               <span className="label-quiet">
                 {detail.label}

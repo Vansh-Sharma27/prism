@@ -31,6 +31,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
@@ -41,17 +45,21 @@ export default function LoginPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    const nextFieldErrors: { email?: string; password?: string } = {};
     if (!EMAIL_RE.test(email.trim())) {
-      setError("Enter a valid email address.");
-      return;
+      nextFieldErrors.email = "Email address needs a valid format. Example: user@domain.com";
     }
-
     if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+      nextFieldErrors.password = "Password must be at least 8 characters.";
+    }
+    if (nextFieldErrors.email || nextFieldErrors.password) {
+      setFieldErrors(nextFieldErrors);
+      setError(null);
       return;
     }
 
     setSubmitting(true);
+    setFieldErrors({});
     setError(null);
 
     try {
@@ -70,7 +78,7 @@ export default function LoginPage() {
         <section className="w-full border border-[var(--border-default)] bg-[var(--bg-secondary)] p-6 sm:p-8">
           <div className="mb-6">
             <p className="font-mono text-xs uppercase tracking-widest text-[var(--accent)]">PRISM Auth</p>
-            <h1 className="mt-2 font-display text-2xl font-semibold uppercase tracking-wider text-[var(--text-primary)]">
+            <h1 className="text-fluid-display-md mt-2 font-display font-semibold uppercase tracking-wider text-[var(--text-primary)] leading-[1.08]">
               Login
             </h1>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
@@ -94,10 +102,20 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFieldErrors((current) => ({ ...current, email: undefined }));
+                }}
                 className="w-full border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
                 required
               />
+              {fieldErrors.email && (
+                <p id="login-email-error" className="mt-1 text-xs text-[var(--warning)]">
+                  {fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div>
@@ -109,11 +127,21 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setFieldErrors((current) => ({ ...current, password: undefined }));
+                }}
                 className="w-full border border-[var(--border-default)] bg-[var(--bg-tertiary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
                 required
                 minLength={8}
               />
+              {fieldErrors.password && (
+                <p id="login-password-error" className="mt-1 text-xs text-[var(--warning)]">
+                  {fieldErrors.password}
+                </p>
+              )}
             </div>
 
             <button

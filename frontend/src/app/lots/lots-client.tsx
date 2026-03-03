@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback } from "react";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/AppShell";
 import { LotCard } from "@/components/LotCard";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { PollingNotice } from "@/components/PollingNotice";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { fetchLots } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
@@ -20,10 +21,7 @@ export function LotsClient() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
-        <Navbar />
-
-        <main id="main-content" className="mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6">
+      <AppShell>
           <PageHeader title="Parking Lots" subtitle="All registered parking locations">
             <div className="flex flex-wrap items-center gap-4 border border-[var(--border-default)] bg-[var(--bg-secondary)] px-4 py-2 sm:gap-6">
               <div className="flex items-center gap-2">
@@ -54,18 +52,10 @@ export function LotsClient() {
           </PageHeader>
 
           {error && (
-            <div className="mb-6 border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>API poll warning: {error}</span>
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="border border-[var(--warning)]/50 px-3 py-1 text-xs font-display font-semibold uppercase tracking-wider transition-colors hover:bg-[var(--warning)]/15"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
+            <PollingNotice
+              message={`API poll warning: ${error}`}
+              actions={[{ label: "Retry", onClick: retry }]}
+            />
           )}
 
           {loading && lots.length === 0 ? (
@@ -89,8 +79,7 @@ export function LotsClient() {
               description="Create a parking lot and slots in backend to begin monitoring."
             />
           )}
-        </main>
-      </div>
+      </AppShell>
     </ProtectedRoute>
   );
 }

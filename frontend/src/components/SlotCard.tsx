@@ -48,7 +48,7 @@ export function SlotCard({ slot, index }: SlotCardProps) {
       className={`
         w-full text-left
         border ${config.border} ${config.bg}
-        transition-all duration-200 ease-out
+        transition-[transform,border-color,box-shadow] duration-200 ease-out
         ${config.hoverBorder}
         hover:translate-y-[-2px] hover:shadow-lg
         animate-scale-in
@@ -59,7 +59,7 @@ export function SlotCard({ slot, index }: SlotCardProps) {
     >
       {/* Top indicator bar */}
       <div
-        className="h-1 transition-all group-hover:h-1.5"
+        className="h-1 transition-opacity duration-200 group-hover:opacity-90"
         style={{ backgroundColor: config.barColor }}
       />
 
@@ -76,7 +76,7 @@ export function SlotCard({ slot, index }: SlotCardProps) {
           </div>
 
           <div
-            className={`flex h-8 w-8 items-center justify-center border ${config.border} ${config.bg} transition-all group-hover:scale-110`}
+            className={`flex h-8 w-8 items-center justify-center border ${config.border} ${config.bg} transition-transform duration-200 group-hover:scale-110`}
           >
             {slot.status === "occupied" ? (
               <Car className={config.text} size={16} />

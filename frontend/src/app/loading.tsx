@@ -17,7 +17,7 @@ export default function DashboardLoading() {
             <div className="skeleton h-3 w-24" />
             <div className="skeleton h-3 w-12" />
           </div>
-          <div className="grid grid-cols-5 divide-x divide-[var(--border-default)]">
+          <div className="grid grid-cols-2 divide-y divide-[var(--border-default)] sm:grid-cols-3 sm:divide-x sm:divide-y-0 md:grid-cols-5">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="px-4 py-4 flex flex-col items-center">
                 <div className="skeleton h-9 w-12 mb-1" />
@@ -34,7 +34,7 @@ export default function DashboardLoading() {
             <div className="h-4 w-1 bg-[var(--accent)]" />
             <div className="skeleton h-5 w-32" />
           </div>
-          <div className="skeleton h-4 w-10" />
+          <div className="skeleton h-4 w-10 hidden sm:block" />
         </div>
 
         {/* Lot cards skeleton */}

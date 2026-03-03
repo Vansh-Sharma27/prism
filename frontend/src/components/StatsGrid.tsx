@@ -5,10 +5,12 @@ interface StatsGridProps {
 }
 
 export function StatsGrid({ stats }: StatsGridProps) {
+  const totalSlots = Math.max(stats.totalSlots, 0);
+
   const items = [
     {
       label: "Total",
-      value: stats.totalSlots,
+      value: totalSlots,
       color: "var(--accent)",
     },
     {
@@ -29,15 +31,17 @@ export function StatsGrid({ stats }: StatsGridProps) {
   ];
 
   const occupancyColor =
-    stats.occupancyRate > 85
+    totalSlots === 0
+      ? "var(--offline)"
+      : stats.occupancyRate > 85
       ? "var(--occupied)"
       : stats.occupancyRate > 60
         ? "var(--warning)"
         : "var(--vacant)";
 
-  const vacantPercent = (stats.vacantSlots / stats.totalSlots) * 100;
-  const occupiedPercent = (stats.occupiedSlots / stats.totalSlots) * 100;
-  const offlinePercent = (stats.offlineSlots / stats.totalSlots) * 100;
+  const vacantPercent = totalSlots > 0 ? (stats.vacantSlots / totalSlots) * 100 : 0;
+  const occupiedPercent = totalSlots > 0 ? (stats.occupiedSlots / totalSlots) * 100 : 0;
+  const offlinePercent = totalSlots > 0 ? (stats.offlineSlots / totalSlots) * 100 : 0;
 
   return (
     <div className="border border-[var(--border-default)] bg-[var(--bg-secondary)]">
@@ -99,7 +103,7 @@ export function StatsGrid({ stats }: StatsGridProps) {
         aria-label={`Slot distribution: ${stats.vacantSlots} vacant, ${stats.occupiedSlots} occupied, ${stats.offlineSlots} offline out of ${stats.totalSlots} total`}
       >
         <div
-          className="h-full transition-all duration-500"
+          className="h-full"
           style={{
             width: `${vacantPercent}%`,
             backgroundColor: "var(--vacant)",
@@ -107,7 +111,7 @@ export function StatsGrid({ stats }: StatsGridProps) {
           aria-hidden="true"
         />
         <div
-          className="h-full transition-all duration-500"
+          className="h-full"
           style={{
             width: `${occupiedPercent}%`,
             backgroundColor: "var(--occupied)",
@@ -115,7 +119,7 @@ export function StatsGrid({ stats }: StatsGridProps) {
           aria-hidden="true"
         />
         <div
-          className="h-full transition-all duration-500"
+          className="h-full"
           style={{
             width: `${offlinePercent}%`,
             backgroundColor: "var(--offline)",

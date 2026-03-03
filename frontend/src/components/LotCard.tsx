@@ -9,28 +9,38 @@ interface LotCardProps {
 }
 
 export function LotCard({ lot, index }: LotCardProps) {
-  const vacantSlots = lot.totalSlots - lot.occupiedSlots - lot.offlineSlots;
-  const occupiedPercent = (lot.occupiedSlots / lot.totalSlots) * 100;
-  const vacantPercent = (vacantSlots / lot.totalSlots) * 100;
-  const offlinePercent = (lot.offlineSlots / lot.totalSlots) * 100;
+  const totalSlots = Math.max(lot.totalSlots, 0);
+  const vacantSlots = Math.max(totalSlots - lot.occupiedSlots - lot.offlineSlots, 0);
+  const occupiedPercent = totalSlots > 0 ? (lot.occupiedSlots / totalSlots) * 100 : 0;
+  const vacantPercent = totalSlots > 0 ? (vacantSlots / totalSlots) * 100 : 0;
+  const offlinePercent = totalSlots > 0 ? (lot.offlineSlots / totalSlots) * 100 : 0;
+  const hasSlots = totalSlots > 0;
 
   const isHealthy = lot.offlineSlots === 0;
   const isCritical = occupiedPercent >= 90;
   const isHighLoad = occupiedPercent >= 70;
 
-  const statusColor = isCritical
-    ? "var(--occupied)"
-    : isHighLoad
-      ? "var(--warning)"
-      : "var(--vacant)";
+  const statusColor = !hasSlots
+    ? "var(--offline)"
+    : isCritical
+      ? "var(--occupied)"
+      : isHighLoad
+        ? "var(--warning)"
+        : "var(--vacant)";
 
-  const statusLabel = isCritical ? "Critical" : isHighLoad ? "High Load" : "Normal";
+  const statusLabel = !hasSlots
+    ? "No Slots"
+    : isCritical
+      ? "Critical"
+      : isHighLoad
+        ? "High Load"
+        : "Normal";
 
   return (
     <Link
       href={`/lots/${lot.id}`}
       className="group block border border-[var(--border-default)] bg-[var(--bg-secondary)]
-        transition-all duration-200 ease-out
+        transition-[transform,border-color,box-shadow] duration-200 ease-out
         hover:border-[var(--accent)] hover:translate-y-[-3px] hover:shadow-xl hover:shadow-black/30
         focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]
         animate-scale-in"
@@ -39,7 +49,7 @@ export function LotCard({ lot, index }: LotCardProps) {
     >
       {/* Top accent bar - animated on hover */}
       <div
-        className="h-1 transition-all duration-200 group-hover:h-1.5"
+        className="h-1 transition-opacity duration-200 group-hover:opacity-90"
         style={{ backgroundColor: statusColor }}
       />
 
@@ -66,7 +76,7 @@ export function LotCard({ lot, index }: LotCardProps) {
           )}
           <ChevronRight
             size={18}
-            className="text-[var(--text-muted)] transition-all duration-200 group-hover:translate-x-1 group-hover:text-[var(--accent)]"
+            className="text-[var(--text-muted)] transition-[color,transform] duration-200 group-hover:translate-x-1 group-hover:text-[var(--accent)]"
           />
         </div>
       </div>
@@ -85,16 +95,16 @@ export function LotCard({ lot, index }: LotCardProps) {
       {/* Progress bar */}
       <div className="h-2 bg-[var(--bg-elevated)] flex overflow-hidden">
         <div
-          className="h-full transition-all duration-500"
+          className="h-full"
           style={{ width: `${vacantPercent}%`, backgroundColor: "var(--vacant)" }}
         />
         <div
-          className="h-full transition-all duration-500"
+          className="h-full"
           style={{ width: `${occupiedPercent}%`, backgroundColor: "var(--occupied)" }}
         />
         {lot.offlineSlots > 0 && (
           <div
-            className="h-full transition-all duration-500"
+            className="h-full"
             style={{ width: `${offlinePercent}%`, backgroundColor: "var(--offline)" }}
           />
         )}

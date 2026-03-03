@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback } from "react";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { PollingNotice } from "@/components/PollingNotice";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { fetchActivityEvents } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
@@ -20,10 +21,7 @@ export function ActivityClient() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
-        <Navbar />
-
-        <main id="main-content" className="mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6">
+      <AppShell>
           <PageHeader title="Activity Log" subtitle="Real-time event stream from all sensors">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-3 py-1.5">
@@ -43,18 +41,10 @@ export function ActivityClient() {
           </PageHeader>
 
           {error && (
-            <div className="mb-6 border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>API poll warning: {error}</span>
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="border border-[var(--warning)]/50 px-3 py-1 text-xs font-display font-semibold uppercase tracking-wider transition-colors hover:bg-[var(--warning)]/15"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
+            <PollingNotice
+              message={`API poll warning: ${error}`}
+              actions={[{ label: "Retry", onClick: retry }]}
+            />
           )}
 
           {loading && events.length === 0 ? (
@@ -177,8 +167,7 @@ export function ActivityClient() {
               </div>
             </>
           )}
-        </main>
-      </div>
+      </AppShell>
     </ProtectedRoute>
   );
 }

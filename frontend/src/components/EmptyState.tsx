@@ -55,7 +55,7 @@ export function EmptyState({
         <button
           type="button"
           onClick={action.onClick}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] text-[var(--bg-primary)] font-semibold uppercase tracking-wider text-sm font-display transition-all hover:bg-[var(--accent-dim)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+          className="flex items-center gap-2 bg-[var(--accent)] px-4 py-2 text-sm font-display font-semibold uppercase tracking-wider text-[var(--bg-primary)] transition-colors duration-200 hover:bg-[var(--accent-dim)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
         >
           <Plus size={16} aria-hidden="true" />
           {action.label}

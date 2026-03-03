@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
-import { Navbar } from "@/components/Navbar";
+import { AppShell } from "@/components/AppShell";
 import { StatsGrid } from "@/components/StatsGrid";
 import { LotCard } from "@/components/LotCard";
 import { SlotCard } from "@/components/SlotCard";
 import { PageHeader, SectionHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { PollingNotice } from "@/components/PollingNotice";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { fetchDashboardData } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
@@ -45,10 +46,7 @@ export function DashboardClient() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-[var(--bg-primary)] hud-grid grain-overlay">
-        <Navbar />
-
-        <main id="main-content" className="mx-auto max-w-7xl px-4 pb-16 pt-24 sm:px-6">
+      <AppShell>
           <PageHeader
             title="Control Dashboard"
             subtitle="Real-time parking slot monitoring - GLA University Campus"
@@ -62,18 +60,10 @@ export function DashboardClient() {
           </PageHeader>
 
           {error && (
-            <div className="mb-6 border border-[var(--warning)]/40 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>API poll warning: {error}</span>
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="border border-[var(--warning)]/50 px-3 py-1 text-xs font-display font-semibold uppercase tracking-wider transition-colors hover:bg-[var(--warning)]/15"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
+            <PollingNotice
+              message={`API poll warning: ${error}`}
+              actions={[{ label: "Retry", onClick: retry }]}
+            />
           )}
 
           <section className="mb-8" aria-label="System statistics">
@@ -141,8 +131,7 @@ export function DashboardClient() {
               <p className="font-mono text-xs text-[var(--text-muted)]">PRISM v1.0 | GLA University</p>
             </div>
           </footer>
-        </main>
-      </div>
+      </AppShell>
     </ProtectedRoute>
   );
 }
