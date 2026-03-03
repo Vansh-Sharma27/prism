@@ -87,6 +87,8 @@ Topic conventions are documented in [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
 - Day 7 simulation documentation: [`docs/day7_simulation_documentation.md`](docs/day7_simulation_documentation.md)
 - Day 7 end-to-end report: [`docs/day7_e2e_simulator_test.md`](docs/day7_e2e_simulator_test.md)
 - Day 8-9 assembly checklist: [`docs/day8_day9_physical_assembly_checklist.md`](docs/day8_day9_physical_assembly_checklist.md)
+- Day 8 hardware progress update: [`docs/day8_hardware_progress_update.md`](docs/day8_hardware_progress_update.md)
+- Day 8 API completion report: [`docs/day8_api_completion_report.md`](docs/day8_api_completion_report.md)
 - Phase 1 handoff summary: [`docs/phase1_hardware_simulation_handoff.md`](docs/phase1_hardware_simulation_handoff.md)
 
 ## Quick Start
