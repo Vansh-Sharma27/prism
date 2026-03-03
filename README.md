@@ -81,10 +81,13 @@ Topic conventions are documented in [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
 ## Documentation
 
 - MQTT contract: [`docs/mqtt_topics.md`](docs/mqtt_topics.md)
+- API docs: [`docs/api_docs.md`](docs/api_docs.md)
 - Hardware assembly guide: [`docs/hardware_assembly_guide.md`](docs/hardware_assembly_guide.md)
 - Wiring diagrams: [`docs/wiring_diagram.md`](docs/wiring_diagram.md)
-- Day 5 simulator integration report: [`docs/day5_full_stack_simulator_test.md`](docs/day5_full_stack_simulator_test.md)
-- Day 6 implementation report: [`docs/day6_auth_simulator_report.md`](docs/day6_auth_simulator_report.md)
+- Day 7 simulation documentation: [`docs/day7_simulation_documentation.md`](docs/day7_simulation_documentation.md)
+- Day 7 end-to-end report: [`docs/day7_e2e_simulator_test.md`](docs/day7_e2e_simulator_test.md)
+- Day 8-9 assembly checklist: [`docs/day8_day9_physical_assembly_checklist.md`](docs/day8_day9_physical_assembly_checklist.md)
+- Phase 1 handoff summary: [`docs/phase1_hardware_simulation_handoff.md`](docs/phase1_hardware_simulation_handoff.md)
 
 ## Quick Start
 
@@ -97,6 +100,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 FLASK_APP=app flask db upgrade
+flask seed-campus
 python run.py
 ```
 
