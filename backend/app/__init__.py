@@ -79,6 +79,9 @@ def create_app(config_name=None):
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(slots_bp, url_prefix='/api/v1')
     app.register_blueprint(lots_bp, url_prefix='/api/v1')
+
+    from seed import register_seed_command
+    register_seed_command(app)
     
     # Optional bootstrap mode for quick local smoke tests without migrations.
     if os.getenv('PRISM_AUTO_CREATE_TABLES', 'false').lower() == 'true':
