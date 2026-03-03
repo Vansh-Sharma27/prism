@@ -93,3 +93,8 @@ temp/
 
 # Internal planning notes (not for GitHub)
 docs/plans/
+
+# Day-wise local tracking reports (must never be pushed)
+docs/day*_closure_report.md
+docs/day*_full_stack_simulator_test.md
+docs/day*_auth_simulator_report.md
