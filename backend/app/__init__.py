@@ -73,12 +73,14 @@ def create_app(config_name=None):
     from app.routes.slots import slots_bp
     from app.routes.lots import lots_bp
     from app.routes.auth import auth_bp
+    from app.routes.insights import insights_bp
     from app import models  # noqa: F401 - ensure model metadata is loaded
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(slots_bp, url_prefix='/api/v1')
     app.register_blueprint(lots_bp, url_prefix='/api/v1')
+    app.register_blueprint(insights_bp)
 
     from seed import register_seed_command
     register_seed_command(app)
