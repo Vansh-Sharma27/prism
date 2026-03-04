@@ -49,6 +49,7 @@ Authorization: Bearer <access_token>
 - Read-heavy endpoints: default `120 per minute` per client IP.
 - Mutating endpoints: default `60 per minute` per client IP.
 - SSE stream endpoint: default `20 per minute` per client IP.
+- Camera upload endpoint: default `120 per minute` per client IP.
 
 ---
 
@@ -656,6 +657,7 @@ Success response (`200`):
         }
       ],
       "status": "online",
+      "uptime_24h_pct": 100.0,
       "total_slots": 3
     }
   ],
@@ -673,6 +675,50 @@ Common errors:
 
 - `401` missing/invalid token
 - `403` admin access required
+
+---
+
+## Camera Endpoint (Day 10)
+
+### POST `/api/v1/camera/upload`
+
+Accept camera frame uploads from ESP32-CAM nodes.
+
+Headers:
+
+- `X-Camera-ID` (required, 1-64 chars, alphanumeric + `._:-`)
+- `Content-Type` (required, one of `image/jpeg`, `image/png`, `image/webp`)
+- `X-Camera-Token` (required only when `PRISM_CAMERA_UPLOAD_TOKEN` is configured)
+
+Body:
+
+- Raw binary image payload.
+
+Config controls:
+
+- `PRISM_CAMERA_UPLOAD_MAX_BYTES` (default `2097152`)
+- `PRISM_CAMERA_UPLOAD_DIR` (default backend instance path `camera_uploads/`)
+- `PRISM_CAMERA_UPLOAD_TOKEN` (optional shared ingest secret)
+
+Success response (`201`):
+
+```json
+{
+  "status": "received",
+  "camera_id": "esp32-cam-a",
+  "filename": "esp32-cam-a_20260304T201733123456_a1b2c3.jpg",
+  "bytes_received": 12345,
+  "content_type": "image/jpeg",
+  "uploaded_at": "2026-03-04T20:17:33.123456"
+}
+```
+
+Common errors:
+
+- `400` missing/invalid headers or empty payload
+- `401` invalid ingest token
+- `413` payload too large
+- `415` unsupported media type
 
 ### GET `/api/admin/analytics`
 

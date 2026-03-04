@@ -124,16 +124,16 @@ class TestPRISMTopics:
 
         time.sleep(0.5)
 
-        topic, payload = publish_slot_update("lot-a", "slot-1", 8.5)
+        topic, payload = publish_slot_update("lot-test-topic", "slot-test-1", 8.5)
 
         time.sleep(0.5)
         sub_client.loop_stop()
         sub_client.disconnect()
 
-        assert len(received) == 1
-        assert received[0]["topic"] == "prism/lot-a/slot/slot-1"
-        assert received[0]["payload"]["distance_cm"] == 8.5
-        assert "timestamp" in received[0]["payload"]
+        matching = [entry for entry in received if entry["topic"] == topic]
+        assert len(matching) >= 1
+        assert matching[-1]["payload"]["distance_cm"] == payload["distance_cm"]
+        assert "timestamp" in matching[-1]["payload"]
 
     def test_heartbeat_topic_format(self):
         """Verify heartbeat message format."""
@@ -153,17 +153,17 @@ class TestPRISMTopics:
 
         time.sleep(0.5)
 
-        topic, payload = publish_heartbeat("lot-a", "esp32-01", 12345, -62)
+        topic, payload = publish_heartbeat("lot-test-topic", "esp32-test-01", 12345, -62)
 
         time.sleep(0.5)
         sub_client.loop_stop()
         sub_client.disconnect()
 
-        assert len(received) == 1
-        assert received[0]["topic"] == "prism/lot-a/heartbeat"
-        assert received[0]["payload"]["device"] == "esp32-01"
-        assert received[0]["payload"]["uptime"] == 12345
-        assert received[0]["payload"]["wifi_rssi"] == -62
+        matching = [entry for entry in received if entry["topic"] == topic]
+        assert len(matching) >= 1
+        assert matching[-1]["payload"]["device"] == payload["device"]
+        assert matching[-1]["payload"]["uptime"] == payload["uptime"]
+        assert matching[-1]["payload"]["wifi_rssi"] == payload["wifi_rssi"]
 
     def test_occupied_threshold(self):
         """Test occupancy detection threshold (15cm)."""

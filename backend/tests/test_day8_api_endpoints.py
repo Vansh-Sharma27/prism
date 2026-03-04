@@ -147,6 +147,8 @@ def test_admin_endpoints_return_sensor_and_analytics_payload_for_admin(client):
     sensors_payload = sensors.get_json()
     assert sensors_payload["summary"]["total_sensors"] >= 1
     assert len(sensors_payload["sensors"]) >= 1
+    assert "uptime_24h_pct" in sensors_payload["sensors"][0]
+    assert 0.0 <= sensors_payload["sensors"][0]["uptime_24h_pct"] <= 100.0
 
     analytics = client.get("/api/admin/analytics?days=7", headers=headers)
     assert analytics.status_code == 200

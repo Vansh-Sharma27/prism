@@ -79,9 +79,19 @@ def create_app(config_name=None):
     app.config["RATE_LIMIT_READ_HEAVY"] = os.getenv("PRISM_RATE_LIMIT_READ_HEAVY", "120 per minute")
     app.config["RATE_LIMIT_MUTATION"] = os.getenv("PRISM_RATE_LIMIT_MUTATION", "60 per minute")
     app.config["RATE_LIMIT_SSE"] = os.getenv("PRISM_RATE_LIMIT_SSE", "20 per minute")
+    app.config["RATE_LIMIT_CAMERA_UPLOAD"] = os.getenv(
+        "PRISM_RATE_LIMIT_CAMERA_UPLOAD",
+        "120 per minute",
+    )
     app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = int(
         os.getenv("PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15)
     )
+    app.config["CAMERA_UPLOAD_MAX_BYTES"] = int(
+        os.getenv("PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024)
+    )
+    camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
+    app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
+    app.config["CAMERA_UPLOAD_TOKEN"] = os.getenv("PRISM_CAMERA_UPLOAD_TOKEN", "")
 
     # Logging baseline
     log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -165,6 +175,7 @@ def create_app(config_name=None):
 
     # Register blueprints
     from app.routes.auth import auth_bp
+    from app.routes.camera import camera_bp
     from app.routes.health import health_bp
     from app.routes.insights import insights_bp
     from app.routes.lots import lots_bp
@@ -173,6 +184,7 @@ def create_app(config_name=None):
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
+    app.register_blueprint(camera_bp, url_prefix="/api/v1/camera")
     app.register_blueprint(slots_bp, url_prefix="/api/v1")
     app.register_blueprint(lots_bp, url_prefix="/api/v1")
     app.register_blueprint(insights_bp)

@@ -249,6 +249,7 @@ def get_admin_sensors():
     offline_after_seconds = request.args.get("offline_after_seconds", 90, type=int)
     offline_after_seconds = max(30, min(offline_after_seconds, 600))
     stale_cutoff = datetime.utcnow() - timedelta(seconds=offline_after_seconds)
+    uptime_window_start = datetime.utcnow() - timedelta(hours=24)
 
     latest_ts_subq = (
         db.session.query(
@@ -274,6 +275,15 @@ def get_admin_sensors():
         .all()
     )
     latest_map = {row.slot_id: row for row in latest_rows}
+    slots_seen_24h = {
+        slot_id
+        for (slot_id,) in (
+            db.session.query(OccupancyLog.slot_id)
+            .filter(OccupancyLog.timestamp >= uptime_window_start)
+            .distinct()
+            .all()
+        )
+    }
 
     sensors: dict[str, dict[str, Any]] = {}
     for slot in ParkingSlot.query.order_by(ParkingSlot.sensor_id.asc(), ParkingSlot.slot_number.asc()).all():
@@ -288,6 +298,7 @@ def get_admin_sensors():
                 "last_seen_at": None,
                 "last_distance_cm": None,
                 "status": "offline",
+                "slots_seen_24h": 0,
                 "slots": [],
             }
             sensors[sensor_id] = sensor_row
@@ -301,6 +312,8 @@ def get_admin_sensors():
             sensor_row["occupied_slots"] += 1
         if is_offline:
             sensor_row["offline_slots"] += 1
+        if slot.id in slots_seen_24h:
+            sensor_row["slots_seen_24h"] += 1
 
         if latest and (
             sensor_row["last_seen_at"] is None or latest.timestamp > sensor_row["last_seen_at"]
@@ -330,6 +343,11 @@ def get_admin_sensors():
         else:
             row["status"] = "online"
 
+        row["uptime_24h_pct"] = round(
+            (row["slots_seen_24h"] / row["total_slots"] * 100) if row["total_slots"] else 0.0,
+            1,
+        )
+        row.pop("slots_seen_24h", None)
         row["last_seen_at"] = row["last_seen_at"].isoformat() if row["last_seen_at"] else None
         sensor_list.append(row)
 
