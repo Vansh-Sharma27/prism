@@ -1,6 +1,6 @@
-# PRISM API Documentation (Day 7)
+# PRISM API Documentation (Phase 2)
 
-This document covers all backend endpoints available in Phase 1.
+This document covers backend endpoints and hardening behavior available in Phase 2.
 
 ## Base URL
 
@@ -22,7 +22,33 @@ Authorization: Bearer <access_token>
 
 - JSON responses only.
 - Typical success codes: `200`, `201`.
-- Typical error codes: `400`, `401`, `403`, `404`, `409`.
+- Typical error codes: `400`, `401`, `403`, `404`, `409`, `429`.
+- API errors use a standardized envelope:
+
+```json
+{
+  "error": "Validation failed",
+  "code": "validation_error",
+  "request_id": "7e9f7c29-f5e0-4f89-87c4-d3642a8dc1d5",
+  "details": {}
+}
+```
+
+- `X-Request-ID` is added on all API responses (and can be supplied by clients).
+
+## Authorization Matrix
+
+- `student`: read routes, prediction/recommendation.
+- `faculty`: student access + mutating slot status APIs.
+- `admin`: full access including `/api/admin/*`.
+
+## Rate Limits
+
+- `POST /api/v1/auth/register`: default `5 per minute` per client IP.
+- `POST /api/v1/auth/login`: default `10 per minute` per client IP.
+- Read-heavy endpoints: default `120 per minute` per client IP.
+- Mutating endpoints: default `60 per minute` per client IP.
+- SSE stream endpoint: default `20 per minute` per client IP.
 
 ---
 
@@ -226,7 +252,7 @@ Common errors:
 
 Create a new parking lot.
 
-Headers: auth required
+Headers: auth required (`faculty` or `admin`)
 
 Request body:
 
@@ -259,6 +285,7 @@ Common errors:
 
 - `400` validation failed
 - `401` missing/invalid token
+- `403` insufficient role permissions
 - `409` lot id already exists
 
 ### GET `/api/v1/lots/summary`
@@ -328,18 +355,33 @@ Common errors:
 
 Update slot status (used by ingestion pipeline and testing).
 
-Headers: auth required
+Headers: auth required (`faculty` or `admin`)
 
 Request body:
 
 ```json
 {
   "is_occupied": true,
-  "is_reserved": false
+  "is_reserved": false,
+  "distance_cm": 7.8
 }
 ```
 
-Success response (`200`): updated slot object.
+Success response (`200`):
+
+```json
+{
+  "changed": true,
+  "slot": {
+    "id": "lot-a-slot-1",
+    "is_occupied": true,
+    "is_reserved": false,
+    "lot_id": "lot-a",
+    "slot_number": 1
+  },
+  "updated": true
+}
+```
 
 Notes:
 
@@ -349,7 +391,42 @@ Common errors:
 
 - `400` validation failed
 - `401` missing/invalid token
+- `403` insufficient role permissions
 - `404` slot not found
+
+### PUT `/api/v1/slots/status/batch`
+
+Apply multiple slot updates in one request with partial-failure reporting.
+
+Headers: auth required (`faculty` or `admin`)
+
+Request body:
+
+```json
+{
+  "updates": [
+    { "slot_id": "lot-a-slot-1", "is_occupied": true, "distance_cm": 7.4 },
+    { "slot_id": "lot-a-slot-2", "is_reserved": true }
+  ]
+}
+```
+
+Success response (`200`):
+
+```json
+{
+  "results": [
+    { "index": 0, "slot_id": "lot-a-slot-1", "status": "updated", "changed": true },
+    { "index": 1, "slot_id": "lot-a-slot-2", "status": "updated", "changed": false }
+  ],
+  "summary": {
+    "requested": 2,
+    "updated": 2,
+    "unchanged": 0,
+    "failed": 0
+  }
+}
+```
 
 ### GET `/api/v1/slots/<slot_id>/events`
 
@@ -382,6 +459,10 @@ Query params:
 
 - `limit` (default `100`, max `500`)
 - `lot_id` (optional lot filter)
+- `slot_id` (optional slot filter)
+- `event_type` (`entry` or `exit`)
+- `start` (optional ISO-8601 datetime)
+- `end` (optional ISO-8601 datetime)
 
 Success response (`200`):
 
@@ -646,6 +727,36 @@ Common errors:
 
 - `401` missing/invalid token
 - `403` admin access required
+
+---
+
+## Realtime Notifications (SSE)
+
+### GET `/api/v1/notifications/stream`
+
+Stream live slot-change events over Server-Sent Events (SSE).
+
+Compatibility route is also available: `GET /api/notifications/stream`
+
+Headers:
+
+- `Authorization: Bearer <token>` (required)
+- `Accept: text/event-stream` (recommended)
+
+Query params:
+
+- `lot_id` (optional; when present, only events for that lot are streamed)
+
+Event types:
+
+- `connected` (initial stream handshake)
+- `slot_change` (on occupancy transitions)
+- `ping` (keepalive heartbeat)
+
+Common errors:
+
+- `401` missing/invalid token
+- `429` rate limit exceeded
 
 ---
 
