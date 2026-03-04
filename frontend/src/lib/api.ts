@@ -22,6 +22,20 @@ interface ApiEventsResponse {
   total: number;
 }
 
+interface ApiAdminSensorsResponse {
+  sensors: ApiAdminSensor[];
+  summary: ApiAdminSensorsSummary;
+}
+
+interface ApiAdminAnalyticsResponse {
+  window_days: number;
+  daily_occupancy_average: ApiDailyOccupancyAverage[];
+  peak_hour: ApiPeakHour;
+  hourly_event_distribution: ApiHourlyDistributionRow[];
+  zone_utilization_comparison: ApiZoneUtilizationRow[];
+  generated_at: string;
+}
+
 interface ApiAuthResponse {
   access_token: string;
   user: AuthUser;
@@ -81,6 +95,63 @@ interface ApiEvent {
   sensor_distance_cm?: number | null;
 }
 
+interface ApiAdminSensorSlot {
+  slot_id: string;
+  lot_id: string;
+  zone_id: string | null;
+  slot_number: number;
+  is_occupied: boolean;
+  last_seen_at: string | null;
+  last_distance_cm: number | null;
+  telemetry_status: "online" | "offline";
+}
+
+interface ApiAdminSensor {
+  sensor_id: string;
+  total_slots: number;
+  occupied_slots: number;
+  offline_slots: number;
+  last_seen_at: string | null;
+  last_distance_cm: number | null;
+  status: "online" | "degraded" | "offline";
+  uptime_24h_pct?: number;
+  slots: ApiAdminSensorSlot[];
+}
+
+interface ApiAdminSensorsSummary {
+  total_sensors: number;
+  online_sensors: number;
+  degraded_sensors: number;
+  offline_sensors: number;
+  offline_threshold_seconds: number;
+}
+
+interface ApiDailyOccupancyAverage {
+  date: string;
+  avg_occupancy_pct: number;
+  samples: number;
+}
+
+interface ApiPeakHour {
+  hour_utc: string | null;
+  events: number;
+}
+
+interface ApiHourlyDistributionRow {
+  hour: number;
+  events: number;
+}
+
+interface ApiZoneUtilizationRow {
+  zone_id: string;
+  zone_name: string;
+  lot_id: string;
+  lot_name: string | null;
+  occupied_slots: number;
+  total_slots: number;
+  utilization_pct: number;
+}
+
 export interface DashboardData {
   lots: ParkingLot[];
   slots: ParkingSlot[];
@@ -108,6 +179,75 @@ export interface ActivityEvent {
   timestamp: number;
   slot: string;
   lot: string;
+}
+
+export interface AdminSensorSlot {
+  slotId: string;
+  lotId: string;
+  zoneId: string | null;
+  slotNumber: number;
+  isOccupied: boolean;
+  lastSeenAt: string | null;
+  lastDistanceCm: number | null;
+  telemetryStatus: "online" | "offline";
+}
+
+export interface AdminSensorRow {
+  sensorId: string;
+  totalSlots: number;
+  occupiedSlots: number;
+  offlineSlots: number;
+  lastSeenAt: string | null;
+  lastDistanceCm: number | null;
+  status: "online" | "degraded" | "offline";
+  uptime24hPct: number;
+  slots: AdminSensorSlot[];
+}
+
+export interface AdminSensorsSummary {
+  totalSensors: number;
+  onlineSensors: number;
+  degradedSensors: number;
+  offlineSensors: number;
+  offlineThresholdSeconds: number;
+}
+
+export interface AdminSensorsData {
+  sensors: AdminSensorRow[];
+  summary: AdminSensorsSummary;
+}
+
+export interface AdminDailyOccupancyRow {
+  date: string;
+  avgOccupancyPct: number;
+  samples: number;
+}
+
+export interface AdminHourlyDistributionRow {
+  hour: number;
+  events: number;
+}
+
+export interface AdminZoneUtilizationRow {
+  zoneId: string;
+  zoneName: string;
+  lotId: string;
+  lotName: string | null;
+  occupiedSlots: number;
+  totalSlots: number;
+  utilizationPct: number;
+}
+
+export interface AdminAnalyticsData {
+  windowDays: number;
+  dailyOccupancyAverage: AdminDailyOccupancyRow[];
+  peakHour: {
+    hourUtc: string | null;
+    events: number;
+  };
+  hourlyEventDistribution: AdminHourlyDistributionRow[];
+  zoneUtilizationComparison: AdminZoneUtilizationRow[];
+  generatedAt: string;
 }
 
 export interface AuthUser {
@@ -453,4 +593,83 @@ export async function fetchActivityEvents(limit = 120): Promise<ActivityEvent[]>
     slot: formatSlotLabel(event),
     lot: event.lot_name || event.lot_id || "Unknown",
   }));
+}
+
+function mapAdminSensorSlot(slot: ApiAdminSensorSlot): AdminSensorSlot {
+  return {
+    slotId: slot.slot_id,
+    lotId: slot.lot_id,
+    zoneId: slot.zone_id,
+    slotNumber: slot.slot_number,
+    isOccupied: slot.is_occupied,
+    lastSeenAt: slot.last_seen_at,
+    lastDistanceCm: slot.last_distance_cm,
+    telemetryStatus: slot.telemetry_status,
+  };
+}
+
+function mapAdminSensor(sensor: ApiAdminSensor): AdminSensorRow {
+  return {
+    sensorId: sensor.sensor_id,
+    totalSlots: sensor.total_slots,
+    occupiedSlots: sensor.occupied_slots,
+    offlineSlots: sensor.offline_slots,
+    lastSeenAt: sensor.last_seen_at,
+    lastDistanceCm: sensor.last_distance_cm,
+    status: sensor.status,
+    uptime24hPct: typeof sensor.uptime_24h_pct === "number" ? sensor.uptime_24h_pct : 0,
+    slots: sensor.slots.map(mapAdminSensorSlot),
+  };
+}
+
+export async function fetchAdminSensors(offlineAfterSeconds = 90): Promise<AdminSensorsData> {
+  const safeThreshold = Math.max(30, Math.min(offlineAfterSeconds, 600));
+  const response = await fetchJson<ApiAdminSensorsResponse>(
+    `${API_BASE}/admin/sensors?offline_after_seconds=${safeThreshold}`
+  );
+
+  return {
+    sensors: response.sensors.map(mapAdminSensor),
+    summary: {
+      totalSensors: response.summary.total_sensors,
+      onlineSensors: response.summary.online_sensors,
+      degradedSensors: response.summary.degraded_sensors,
+      offlineSensors: response.summary.offline_sensors,
+      offlineThresholdSeconds: response.summary.offline_threshold_seconds,
+    },
+  };
+}
+
+export async function fetchAdminAnalytics(days = 7): Promise<AdminAnalyticsData> {
+  const safeDays = Math.max(1, Math.min(days, 30));
+  const response = await fetchJson<ApiAdminAnalyticsResponse>(
+    `${API_BASE}/admin/analytics?days=${safeDays}`
+  );
+
+  return {
+    windowDays: response.window_days,
+    dailyOccupancyAverage: response.daily_occupancy_average.map((row) => ({
+      date: row.date,
+      avgOccupancyPct: row.avg_occupancy_pct,
+      samples: row.samples,
+    })),
+    peakHour: {
+      hourUtc: response.peak_hour.hour_utc,
+      events: response.peak_hour.events,
+    },
+    hourlyEventDistribution: response.hourly_event_distribution.map((row) => ({
+      hour: row.hour,
+      events: row.events,
+    })),
+    zoneUtilizationComparison: response.zone_utilization_comparison.map((row) => ({
+      zoneId: row.zone_id,
+      zoneName: row.zone_name,
+      lotId: row.lot_id,
+      lotName: row.lot_name,
+      occupiedSlots: row.occupied_slots,
+      totalSlots: row.total_slots,
+      utilizationPct: row.utilization_pct,
+    })),
+    generatedAt: response.generated_at,
+  };
 }

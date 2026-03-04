@@ -95,6 +95,7 @@ Expanded auth behavior tests now cover:
 - register validation and duplicate-email conflict
 - successful student registration flow + admin-role denial
 - forced logout on unauthorized protected API responses
+- admin analytics window filtering and CSV export
 
 Run the auth suite:
 
