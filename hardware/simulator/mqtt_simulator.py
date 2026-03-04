@@ -28,7 +28,8 @@ DEFAULT_LOT_ID = "lot-a"
 DEFAULT_LOTS = [DEFAULT_LOT_ID, "lot-b"]
 DEFAULT_INTERVAL = 5  # seconds between updates
 DEFAULT_MODE = "dynamic"
-DEFAULT_FAILURE_PROBABILITY = 0.02
+# Keep demo-default stable; outage simulation can be enabled explicitly.
+DEFAULT_FAILURE_PROBABILITY = 0.0
 DEFAULT_FAILURE_MIN_CYCLES = 2
 DEFAULT_FAILURE_MAX_CYCLES = 6
 
@@ -255,6 +256,13 @@ class ParkingSimulator:
         print(f"\nSimulating {total_slots} slots across lots: {', '.join(self.lot_ids)}")
         print(f"Publishing every {self.interval} seconds")
         print(f"Mode: {self.mode}")
+        missing_default_lots = [lot_id for lot_id in DEFAULT_LOTS if lot_id not in self.lot_ids]
+        if missing_default_lots:
+            print(
+                "WARNING: running subset lot simulation. "
+                "Missing lots will appear offline/static in the dashboard: "
+                f"{', '.join(missing_default_lots)}"
+            )
         print(
             f"Failure simulation: probability={self.failure_probability:.1%}, "
             f"duration={self.failure_min_cycles}-{self.failure_max_cycles} cycles"
@@ -315,6 +323,27 @@ class ParkingSimulator:
         print("\nSimulator stopped.")
 
 
+def resolve_lot_ids(single_lot: str | None, lots_csv: str | None) -> list[str]:
+    """
+    Resolve lot IDs from CLI input.
+
+    Rules:
+    - If --lots is provided, use its comma-separated values.
+    - Else if --lot is provided, use that one lot.
+    - Else default to configured multi-lot simulation set.
+    """
+    if lots_csv:
+        parsed_lots = [item.strip() for item in lots_csv.split(",") if item.strip()]
+        if not parsed_lots:
+            raise ValueError("--lots was provided but no valid lot IDs were found")
+        return list(dict.fromkeys(parsed_lots))
+
+    if single_lot:
+        return [single_lot.strip()]
+
+    return list(DEFAULT_LOTS)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="MQTT simulator for PRISM parking system"
@@ -335,8 +364,11 @@ def main():
     parser.add_argument(
         "--lot",
         "-l",
-        default=DEFAULT_LOT_ID,
-        help=f"Parking lot ID (default: {DEFAULT_LOT_ID})",
+        default=None,
+        help=(
+            "Single parking lot ID (optional). "
+            f"If omitted, defaults to all configured lots: {','.join(DEFAULT_LOTS)}"
+        ),
     )
     parser.add_argument(
         "--lots",
@@ -394,13 +426,11 @@ def main():
     )
     args = parser.parse_args()
 
-    lot_ids = [args.lot]
-    if args.lots:
-        parsed_lots = [item.strip() for item in args.lots.split(",") if item.strip()]
-        if not parsed_lots:
-            print("Error: --lots was provided but no valid lot IDs were found.")
-            sys.exit(1)
-        lot_ids = parsed_lots
+    try:
+        lot_ids = resolve_lot_ids(args.lot, args.lots)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
 
     simulator = ParkingSimulator(
         broker=args.broker,

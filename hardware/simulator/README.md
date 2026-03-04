@@ -11,7 +11,7 @@ pip install paho-mqtt
 ## Usage
 
 ```bash
-# Basic usage (connects to localhost:1883)
+# Basic usage (connects to localhost:1883 and simulates lot-a + lot-b)
 python mqtt_simulator.py
 
 # Custom broker
@@ -33,11 +33,11 @@ python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 
 |--------|---------|-------------|
 | `--broker, -b` | localhost | MQTT broker host |
 | `--port, -p` | 1883 | MQTT broker port |
-| `--lot, -l` | lot-a | Parking lot ID |
+| `--lot, -l` | unset | Single parking lot ID (optional). If omitted, simulator targets all configured lots |
 | `--lots` | unset | Comma-separated lot IDs for one process run (overrides `--lot`) |
 | `--interval, -i` | 5 | Seconds between updates |
 | `--mode` | dynamic | `dynamic` follows hour-based occupancy profile, `random` keeps static flips |
-| `--failure-probability` | 0.02 | Chance per cycle that a slot enters simulated outage |
+| `--failure-probability` | 0.0 | Chance per cycle that a slot enters simulated outage |
 | `--failure-min-cycles` | 2 | Minimum outage duration |
 | `--failure-max-cycles` | 6 | Maximum outage duration |
 | `--cycles` | unset | Stop automatically after N cycles |
@@ -47,6 +47,7 @@ python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 
 
 - Simulates 6 parking slots (slot-1 through slot-6)
 - Supports one lot (`--lot`) or multiple lots in a single process (`--lots lot-a,lot-b`)
+- Default run simulates all configured lots (`lot-a`, `lot-b`) to keep both dashboard lots live
 - Dynamic mode tracks realistic hourly occupancy targets (rush/peak/low windows)
 - Random mode preserves classic 10% per-cycle flipping
 - Slots can occasionally enter simulated offline windows (no slot update published)
