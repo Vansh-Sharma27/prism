@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AUTH_SESSION_INVALID_EVENT,
   AUTH_TOKEN_STORAGE_KEY,
   fetchCurrentUser,
   loginUser,
@@ -29,6 +30,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const JWT_EXPIRY_SKEW_MS = 30_000;
 
 function parseJwtExpiry(token: string): number | null {
   try {
@@ -38,7 +40,8 @@ function parseJwtExpiry(token: string): number | null {
     }
 
     const base64 = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = JSON.parse(window.atob(base64)) as { exp?: number };
+    const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+    const decoded = JSON.parse(window.atob(`${base64}${padding}`)) as { exp?: number };
     return typeof decoded.exp === "number" ? decoded.exp : null;
   } catch {
     return null;
@@ -48,44 +51,49 @@ function parseJwtExpiry(token: string): number | null {
 function tokenIsExpired(token: string): boolean {
   const expiry = parseJwtExpiry(token);
   if (!expiry) {
-    return false;
+    return true;
   }
-  return Date.now() >= expiry * 1000;
+  return Date.now() >= expiry * 1000 - JWT_EXPIRY_SKEW_MS;
+}
+
+function getStoredToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function clearStoredToken() {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures; user will still be treated as logged out.
+  }
 }
 
 function storeToken(token: string) {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  try {
+    window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Ignore storage failures; in-memory auth state still updates.
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") {
-      return true;
-    }
-
-    const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    if (!token) {
-      return false;
-    }
-
-    if (tokenIsExpired(token)) {
-      clearStoredToken();
-      return false;
-    }
-
-    return true;
-  });
+  // Keep initial state deterministic across server and client to avoid hydration mismatch.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refreshSession = useCallback(async () => {
@@ -102,12 +110,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!loading) {
-      return;
-    }
-
     let cancelled = false;
+
+    const finishAsLoggedOut = (nextError: string | null) => {
+      clearStoredToken();
+      if (!cancelled) {
+        setUser(null);
+        setError(nextError);
+        setLoading(false);
+      }
+    };
+
     const timer = window.setTimeout(() => {
+      const token = getStoredToken();
+      if (!token || tokenIsExpired(token)) {
+        finishAsLoggedOut(null);
+        return;
+      }
+
       fetchCurrentUser()
         .then((currentUser) => {
           if (cancelled) {
@@ -117,12 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setError(null);
         })
         .catch((err) => {
-          if (cancelled) {
-            return;
-          }
-          clearStoredToken();
-          setUser(null);
-          setError(err instanceof Error ? err.message : "Session refresh failed");
+          finishAsLoggedOut(err instanceof Error ? err.message : "Session refresh failed");
         })
         .finally(() => {
           if (!cancelled) {
@@ -135,7 +150,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [loading]);
+  }, []);
+
+  useEffect(() => {
+    const handleSessionInvalid = () => {
+      clearStoredToken();
+      setUser(null);
+      setError("Session expired. Please login again.");
+      setLoading(false);
+    };
+
+    window.addEventListener(AUTH_SESSION_INVALID_EVENT, handleSessionInvalid);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_INVALID_EVENT, handleSessionInvalid);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== AUTH_TOKEN_STORAGE_KEY) {
+        return;
+      }
+
+      const nextToken = event.newValue;
+      if (!nextToken || tokenIsExpired(nextToken)) {
+        clearStoredToken();
+        setUser(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      void refreshSession().catch(() => {
+        // refreshSession already handles local state updates on failure.
+      });
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [refreshSession]);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await loginUser({ email, password });

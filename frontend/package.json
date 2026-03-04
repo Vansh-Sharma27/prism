@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:e2e:hydration": "playwright test --config=playwright.config.ts tests/e2e/hydration-console.spec.ts",
+    "test:e2e:auth": "playwright test --config=playwright.config.ts tests/e2e/auth-flows.spec.ts"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",
@@ -15,6 +18,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

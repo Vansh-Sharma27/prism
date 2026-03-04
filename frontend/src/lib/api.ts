@@ -3,6 +3,7 @@ import type { ParkingLot, ParkingSlot, SystemStats } from "@/types/parking";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 const OFFLINE_THRESHOLD_SECONDS = 30;
 export const AUTH_TOKEN_STORAGE_KEY = "prism_access_token";
+export const AUTH_SESSION_INVALID_EVENT = "prism:auth-session-invalid";
 
 type SlotStatus = ParkingSlot["status"];
 
@@ -38,6 +39,10 @@ interface ApiCurrentUserResponse {
 interface ApiErrorResponse {
   error?: string;
   details?: unknown;
+}
+
+interface FetchJsonOptions {
+  includeAuth?: boolean;
 }
 
 interface ApiLot {
@@ -151,7 +156,12 @@ async function parseApiErrorMessage(res: Response): Promise<string> {
 
 function getBearerToken(): string | null {
   if (typeof window !== "undefined") {
-    const clientToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    let clientToken: string | null = null;
+    try {
+      clientToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+    } catch {
+      clientToken = null;
+    }
     if (clientToken) {
       return clientToken;
     }
@@ -161,8 +171,20 @@ function getBearerToken(): string | null {
   return envToken || null;
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const token = getBearerToken();
+function notifySessionInvalid(status: number, url: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent(AUTH_SESSION_INVALID_EVENT, {
+      detail: { status, url },
+    })
+  );
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit, options?: FetchJsonOptions): Promise<T> {
+  const includeAuth = options?.includeAuth ?? true;
+  const token = includeAuth ? getBearerToken() : null;
   const baseHeaders: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
   const headers: HeadersInit = {
     ...baseHeaders,
@@ -174,13 +196,14 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     headers,
   });
 
-  if (res.status === 401) {
+  if ((res.status === 401 || res.status === 422) && includeAuth) {
+    notifySessionInvalid(res.status, url);
     throw new Error("Unauthorized. Please login again.");
   }
 
   if (!res.ok) {
     const message = await parseApiErrorMessage(res);
-    throw new Error(`${message} (${url})`);
+    throw new Error(message);
   }
 
   return res.json() as Promise<T>;
@@ -190,11 +213,15 @@ export async function loginUser(payload: LoginPayload): Promise<{
   accessToken: string;
   user: AuthUser;
 }> {
-  const response = await fetchJson<ApiAuthResponse>(`${API_BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const response = await fetchJson<ApiAuthResponse>(
+    `${API_BASE}/auth/login`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    { includeAuth: false }
+  );
 
   return {
     accessToken: response.access_token,
@@ -203,11 +230,15 @@ export async function loginUser(payload: LoginPayload): Promise<{
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<AuthUser> {
-  const response = await fetchJson<ApiRegisterResponse>(`${API_BASE}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const response = await fetchJson<ApiRegisterResponse>(
+    `${API_BASE}/auth/register`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    { includeAuth: false }
+  );
 
   return response.user;
 }
