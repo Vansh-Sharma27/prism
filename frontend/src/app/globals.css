@@ -279,19 +279,27 @@ body {
 
 /* Skip to content link for screen readers */
 .skip-link {
-  position: absolute;
-  top: -40px;
-  left: 0;
+  position: fixed;
+  top: 12px;
+  left: 12px;
   background: var(--accent);
   color: var(--bg-primary);
   padding: 8px 16px;
-  z-index: 100;
+  z-index: 1000;
   font-weight: 600;
   text-decoration: none;
+  border: 1px solid var(--bg-primary);
+  transform: translateY(-160%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 120ms ease-out, opacity 120ms ease-out;
 }
 
-.skip-link:focus {
-  top: 0;
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Improved link/button focus for keyboard nav */
