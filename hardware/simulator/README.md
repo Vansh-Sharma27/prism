@@ -20,6 +20,9 @@ python mqtt_simulator.py --broker 192.168.1.100 --port 1883
 # Custom lot ID and interval
 python mqtt_simulator.py --lot lot-b --interval 3
 
+# Multi-lot simulation in one process (recommended for full dashboard checks)
+python mqtt_simulator.py --lots lot-a,lot-b --interval 3
+
 # Day 6 dynamic mode with failure simulation and bounded run
 python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 --interval 2
 ```
@@ -31,6 +34,7 @@ python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 
 | `--broker, -b` | localhost | MQTT broker host |
 | `--port, -p` | 1883 | MQTT broker port |
 | `--lot, -l` | lot-a | Parking lot ID |
+| `--lots` | unset | Comma-separated lot IDs for one process run (overrides `--lot`) |
 | `--interval, -i` | 5 | Seconds between updates |
 | `--mode` | dynamic | `dynamic` follows hour-based occupancy profile, `random` keeps static flips |
 | `--failure-probability` | 0.02 | Chance per cycle that a slot enters simulated outage |
@@ -42,6 +46,7 @@ python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 
 ## Behavior
 
 - Simulates 6 parking slots (slot-1 through slot-6)
+- Supports one lot (`--lot`) or multiple lots in a single process (`--lots lot-a,lot-b`)
 - Dynamic mode tracks realistic hourly occupancy targets (rush/peak/low windows)
 - Random mode preserves classic 10% per-cycle flipping
 - Slots can occasionally enter simulated offline windows (no slot update published)

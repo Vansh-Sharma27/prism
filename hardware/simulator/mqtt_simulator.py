@@ -25,6 +25,7 @@ except ImportError:
 DEFAULT_BROKER = "localhost"
 DEFAULT_PORT = 1883
 DEFAULT_LOT_ID = "lot-a"
+DEFAULT_LOTS = [DEFAULT_LOT_ID, "lot-b"]
 DEFAULT_INTERVAL = 5  # seconds between updates
 DEFAULT_MODE = "dynamic"
 DEFAULT_FAILURE_PROBABILITY = 0.02
@@ -80,7 +81,7 @@ class ParkingSimulator:
         self,
         broker: str,
         port: int,
-        lot_id: str,
+        lot_ids: list[str],
         interval: float,
         mode: str,
         failure_probability: float,
@@ -91,7 +92,7 @@ class ParkingSimulator:
     ):
         self.broker = broker
         self.port = port
-        self.lot_id = lot_id
+        self.lot_ids = list(dict.fromkeys(lot_ids))
         self.interval = interval
         self.mode = mode
         self.failure_probability = max(0.0, min(failure_probability, 1.0))
@@ -103,9 +104,15 @@ class ParkingSimulator:
         if seed is not None:
             random.seed(seed)
 
-        # Initialize slot states randomly
-        self.slot_states = {slot: random.choice([True, False]) for slot in SLOTS}
-        self.failure_cycles_remaining: Dict[str, int] = {slot: 0 for slot in SLOTS}
+        # Initialize slot states randomly per lot.
+        self.slot_states: Dict[str, Dict[str, bool]] = {
+            lot_id: {slot: random.choice([True, False]) for slot in SLOTS}
+            for lot_id in self.lot_ids
+        }
+        self.failure_cycles_remaining: Dict[str, Dict[str, int]] = {
+            lot_id: {slot: 0 for slot in SLOTS}
+            for lot_id in self.lot_ids
+        }
 
         # MQTT client setup
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -140,7 +147,7 @@ class ParkingSimulator:
         """Return target occupancy ratio for the current simulated hour."""
         return HOURLY_OCCUPANCY_PROFILE.get(hour, 0.5)
 
-    def _effective_change_probability(self, slot: str, hour: int) -> float:
+    def _effective_change_probability(self, lot_id: str, slot: str, hour: int) -> float:
         """
         Compute occupancy flip probability.
 
@@ -150,11 +157,12 @@ class ParkingSimulator:
             return CHANGE_PROBABILITY
 
         target = self._target_occupancy_ratio(hour)
-        occupied_count = sum(1 for occupied in self.slot_states.values() if occupied)
-        current_ratio = occupied_count / len(self.slot_states)
+        lot_state = self.slot_states[lot_id]
+        occupied_count = sum(1 for occupied in lot_state.values() if occupied)
+        current_ratio = occupied_count / len(lot_state)
         delta = target - current_ratio
 
-        if self.slot_states[slot]:
+        if lot_state[slot]:
             # If we're above target, increase chance to vacate this slot.
             if delta < 0:
                 return min(0.65, CHANGE_PROBABILITY + abs(delta) * 0.8)
@@ -165,32 +173,32 @@ class ParkingSimulator:
             return min(0.65, CHANGE_PROBABILITY + abs(delta) * 0.8)
         return max(0.02, CHANGE_PROBABILITY * 0.3)
 
-    def _maybe_toggle_occupancy(self, slot: str, hour: int) -> bool:
+    def _maybe_toggle_occupancy(self, lot_id: str, slot: str, hour: int) -> bool:
         """Toggle occupancy based on the selected simulator mode."""
-        probability = self._effective_change_probability(slot, hour)
+        probability = self._effective_change_probability(lot_id, slot, hour)
         if random.random() < probability:
-            self.slot_states[slot] = not self.slot_states[slot]
+            self.slot_states[lot_id][slot] = not self.slot_states[lot_id][slot]
             return True
         return False
 
-    def _slot_is_offline(self, slot: str) -> bool:
+    def _slot_is_offline(self, lot_id: str, slot: str) -> bool:
         """Return whether a slot is in a simulated sensor outage window."""
-        remaining = self.failure_cycles_remaining[slot]
+        remaining = self.failure_cycles_remaining[lot_id][slot]
         if remaining > 0:
-            self.failure_cycles_remaining[slot] = remaining - 1
+            self.failure_cycles_remaining[lot_id][slot] = remaining - 1
             return True
 
         if random.random() < self.failure_probability:
-            self.failure_cycles_remaining[slot] = random.randint(
+            self.failure_cycles_remaining[lot_id][slot] = random.randint(
                 self.failure_min_cycles, self.failure_max_cycles
             ) - 1
             return True
 
         return False
 
-    def _publish_slot_update(self, slot: str) -> None:
+    def _publish_slot_update(self, lot_id: str, slot: str) -> None:
         """Publish a single slot update to MQTT."""
-        is_occupied = self.slot_states[slot]
+        is_occupied = self.slot_states[lot_id][slot]
         distance = self._generate_distance(is_occupied)
 
         payload = {
@@ -199,16 +207,16 @@ class ParkingSimulator:
             "timestamp": int(time.time()),
         }
 
-        topic = f"prism/{self.lot_id}/slot/{slot}"
+        topic = f"prism/{lot_id}/slot/{slot}"
         result = self.client.publish(topic, json.dumps(payload))
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
-            print(f"  {slot}: publish failed rc={result.rc}")
+            print(f"  {lot_id}/{slot}: publish failed rc={result.rc}")
             return
 
         status = "OCCUPIED" if is_occupied else "VACANT"
-        print(f"  {slot}: {status:8} ({distance:5.1f} cm)")
+        print(f"  {lot_id}/{slot}: {status:8} ({distance:5.1f} cm)")
 
-    def _publish_offline_heartbeat(self, slot: str) -> None:
+    def _publish_offline_heartbeat(self, lot_id: str, slot: str) -> None:
         """Emit an informational heartbeat event during simulated slot outage."""
         payload = {
             "device": "simulator",
@@ -216,32 +224,35 @@ class ParkingSimulator:
             "status": "offline",
             "timestamp": int(time.time()),
         }
-        topic = f"prism/{self.lot_id}/heartbeat"
+        topic = f"prism/{lot_id}/heartbeat"
         self.client.publish(topic, json.dumps(payload))
 
-    def _publish_heartbeat(self):
+    def _publish_heartbeat(self, lot_id: str) -> None:
         """Publish device heartbeat."""
         payload = {
             "device": "simulator",
             "uptime": int(time.time()),
             "wifi_rssi": random.randint(-70, -40),
         }
-        topic = f"prism/{self.lot_id}/heartbeat"
+        topic = f"prism/{lot_id}/heartbeat"
         self.client.publish(topic, json.dumps(payload))
 
     def _print_cycle_header(self, cycle: int, hour: int) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")
         target = self._target_occupancy_ratio(hour)
-        current_ratio = (
-            sum(1 for occupied in self.slot_states.values() if occupied) / len(self.slot_states)
-        )
+        lot_ratios = []
+        for lot_id in self.lot_ids:
+            lot_state = self.slot_states[lot_id]
+            ratio = sum(1 for occupied in lot_state.values() if occupied) / len(lot_state)
+            lot_ratios.append(f"{lot_id}={ratio:.0%}")
         print(
             f"[{timestamp}] Cycle {cycle} | "
-            f"target={target:.0%} current={current_ratio:.0%} mode={self.mode}"
+            f"target={target:.0%} current({', '.join(lot_ratios)}) mode={self.mode}"
         )
 
     def _print_start_banner(self) -> None:
-        print(f"\nSimulating {len(SLOTS)} slots in {self.lot_id}")
+        total_slots = len(self.lot_ids) * len(SLOTS)
+        print(f"\nSimulating {total_slots} slots across lots: {', '.join(self.lot_ids)}")
         print(f"Publishing every {self.interval} seconds")
         print(f"Mode: {self.mode}")
         print(
@@ -271,20 +282,22 @@ class ParkingSimulator:
             now = datetime.now()
             self._print_cycle_header(cycle, now.hour)
 
-            # Update each slot.
-            for slot in SLOTS:
-                if self._slot_is_offline(slot):
-                    self._publish_offline_heartbeat(slot)
-                    print(f"  {slot}: OFFLINE  (simulated sensor outage)")
-                    continue
+            # Update each slot for each configured lot.
+            for lot_id in self.lot_ids:
+                for slot in SLOTS:
+                    if self._slot_is_offline(lot_id, slot):
+                        self._publish_offline_heartbeat(lot_id, slot)
+                        print(f"  {lot_id}/{slot}: OFFLINE  (simulated sensor outage)")
+                        continue
 
-                self._maybe_toggle_occupancy(slot, now.hour)
-                self._publish_slot_update(slot)
+                    self._maybe_toggle_occupancy(lot_id, slot, now.hour)
+                    self._publish_slot_update(lot_id, slot)
 
             # Publish heartbeat every 6 cycles (30 seconds at default interval)
             if cycle % 6 == 0:
-                self._publish_heartbeat()
-                print("  [heartbeat sent]")
+                for lot_id in self.lot_ids:
+                    self._publish_heartbeat(lot_id)
+                print(f"  [heartbeat sent: {', '.join(self.lot_ids)}]")
 
             print()
 
@@ -324,6 +337,14 @@ def main():
         "-l",
         default=DEFAULT_LOT_ID,
         help=f"Parking lot ID (default: {DEFAULT_LOT_ID})",
+    )
+    parser.add_argument(
+        "--lots",
+        default=None,
+        help=(
+            "Comma-separated lot IDs for multi-lot simulation "
+            f"(example: {','.join(DEFAULT_LOTS)})"
+        ),
     )
     parser.add_argument(
         "--interval",
@@ -373,10 +394,18 @@ def main():
     )
     args = parser.parse_args()
 
+    lot_ids = [args.lot]
+    if args.lots:
+        parsed_lots = [item.strip() for item in args.lots.split(",") if item.strip()]
+        if not parsed_lots:
+            print("Error: --lots was provided but no valid lot IDs were found.")
+            sys.exit(1)
+        lot_ids = parsed_lots
+
     simulator = ParkingSimulator(
         broker=args.broker,
         port=args.port,
-        lot_id=args.lot,
+        lot_ids=lot_ids,
         interval=args.interval,
         mode=args.mode,
         failure_probability=args.failure_probability,
