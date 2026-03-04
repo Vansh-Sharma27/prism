@@ -5,8 +5,10 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
-from app import db
+from app import db, limiter
+from app.authz import require_roles
 from app.models.parking import ParkingLot
+from app.responses import error_response
 from app.schemas import lot_schema
 
 lots_bp = Blueprint('lots', __name__)
@@ -17,13 +19,14 @@ def _require_read_access():
         return None
 
     if get_jwt_identity() is None:
-        return jsonify({"error": "Authentication required"}), 401
+        return error_response("Authentication required", 401)
 
     return None
 
 
 @lots_bp.route('/lots')
 @jwt_required(optional=True)
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_all_lots():
     """Get all parking lots with availability summary."""
     access_error = _require_read_access()
@@ -39,6 +42,7 @@ def get_all_lots():
 
 @lots_bp.route('/lots/<lot_id>')
 @jwt_required(optional=True)
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_lot(lot_id):
     """Get a specific parking lot with slot details."""
     access_error = _require_read_access()
@@ -52,16 +56,17 @@ def get_lot(lot_id):
 
 
 @lots_bp.route('/lots', methods=['POST'])
-@jwt_required()
+@require_roles("faculty", "admin", error_message="Insufficient role permissions")
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_MUTATION", "60 per minute"))
 def create_lot():
     """Create a new parking lot."""
     try:
         data = lot_schema.load(request.get_json())
     except ValidationError as err:
-        return jsonify({"error": "Validation failed", "details": err.messages}), 400
+        return error_response("Validation failed", 400, code="validation_error", details=err.messages)
 
     if ParkingLot.query.filter_by(id=data['id']).first():
-        return jsonify({"error": "Lot id already exists"}), 409
+        return error_response("Lot id already exists", 409, code="conflict")
 
     lot = ParkingLot(
         id=data['id'],
@@ -78,6 +83,7 @@ def create_lot():
 
 @lots_bp.route('/lots/summary')
 @jwt_required(optional=True)
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_lots_summary():
     """Get summary statistics for all lots."""
     access_error = _require_read_access()

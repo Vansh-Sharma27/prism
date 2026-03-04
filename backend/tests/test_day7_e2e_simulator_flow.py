@@ -36,6 +36,15 @@ def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _login(client, email: str, password: str) -> dict[str, str]:
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert response.status_code == 200
+    return _auth_header(response.get_json()["access_token"])
+
+
 def test_day7_register_login_and_live_updates_flow(client):
     register_response = client.post(
         "/api/v1/auth/register",
@@ -46,16 +55,8 @@ def test_day7_register_login_and_live_updates_flow(client):
     )
     assert register_response.status_code == 201
 
-    login_response = client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": "day7.student@gla.ac.in",
-            "password": "StrongPass123",
-        },
-    )
-    assert login_response.status_code == 200
-    token = login_response.get_json()["access_token"]
-    headers = _auth_header(token)
+    headers = _login(client, "day7.student@gla.ac.in", "StrongPass123")
+    admin_headers = _login(client, "admin@prism.local", "Admin@12345")
 
     lots_response = client.get("/api/v1/lots", headers=headers)
     assert lots_response.status_code == 200
@@ -74,11 +75,13 @@ def test_day7_register_login_and_live_updates_flow(client):
 
     update_response = client.put(
         f"/api/v1/slots/{slot_id}/status",
-        headers=headers,
+        headers=admin_headers,
         json={"is_occupied": True},
     )
     assert update_response.status_code == 200
-    assert update_response.get_json()["is_occupied"] is True
+    update_payload = update_response.get_json()
+    assert update_payload["slot"]["is_occupied"] is True
+    assert update_payload["changed"] is True
 
     events_response = client.get("/api/v1/events?lot_id=lot-a&limit=20", headers=headers)
     assert events_response.status_code == 200

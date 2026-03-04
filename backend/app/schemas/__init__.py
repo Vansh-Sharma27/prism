@@ -78,6 +78,7 @@ class SlotStatusUpdateSchema(Schema):
     """Validates slot status update."""
     is_occupied = fields.Bool()
     is_reserved = fields.Bool()
+    distance_cm = fields.Float()
 
 
 class SlotResponseSchema(Schema):

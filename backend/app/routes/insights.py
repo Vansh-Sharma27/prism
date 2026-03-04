@@ -1,18 +1,22 @@
-"""Prediction, recommendation, and admin analytics endpoints."""
+"""Prediction, recommendation, admin analytics, and notification endpoints."""
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from datetime import datetime, timedelta
+from queue import Empty
 from typing import Any
 
-from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
+from flask_jwt_extended import jwt_required
 from sqlalchemy import case, func
 
-from app import db
+from app import db, limiter
+from app.authz import get_current_user_from_jwt, require_roles
 from app.models.parking import OccupancyLog, ParkingEvent, ParkingLot, ParkingSlot, Zone
-from app.models.user import User
+from app.responses import error_response
+from app.services.notifications import broadcaster
 
 insights_bp = Blueprint("insights", __name__)
 
@@ -48,14 +52,15 @@ def _time_factor(hour: int) -> float:
     return -8.0
 
 
-def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, Any, None]:
+def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
     day = request.args.get("day", "wednesday").strip().lower()
     time_label = request.args.get("time", "10:00").strip()
 
     if day not in VALID_DAYS:
-        return None, (
-            jsonify({"error": "Invalid day. Use monday-sunday."}),
+        return None, error_response(
+            "Invalid day. Use monday-sunday.",
             400,
+            code="validation_error",
         ), None
 
     try:
@@ -63,9 +68,10 @@ def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, Any, None]:
         if hour < 0 or hour > 23:
             raise ValueError("hour out of range")
     except Exception:
-        return None, (
-            jsonify({"error": "Invalid time. Use HH:MM in 24-hour format."}),
+        return None, error_response(
+            "Invalid time. Use HH:MM in 24-hour format.",
             400,
+            code="validation_error",
         ), None
 
     return day, time_label, hour
@@ -102,7 +108,7 @@ def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> li
 
     for zone in zone_rows:
         current = zone["current_occupancy_pct"]
-        # Skeleton heuristic for Day 8. Real model integration is planned for Phase 3.
+        # Skeleton heuristic for Phase 2; real model integration is planned in Phase 3.
         predicted = max(0.0, min(100.0, round(current + day_adjustment + hour_adjustment, 1)))
         if predicted >= current + 5:
             trend = "filling"
@@ -125,10 +131,19 @@ def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> li
     return predictions
 
 
+def _format_sse(event_name: str, payload: dict[str, Any]) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n"
+
+
 @insights_bp.route("/api/v1/lots/<lot_id>/predict", methods=["GET"])
 @jwt_required()
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_prediction(lot_id: str):
-    """Return a Day 8 mock prediction payload for a lot."""
+    """Return a mock prediction payload for a lot."""
+    _, auth_error = get_current_user_from_jwt()
+    if auth_error:
+        return auth_error
+
     parsed = _parse_day_and_time()
     if parsed[0] is None:
         return parsed[1]
@@ -136,7 +151,7 @@ def get_prediction(lot_id: str):
 
     lot, zone_rows = _lot_zone_snapshot(lot_id)
     if lot is None:
-        return jsonify({"error": "Lot not found"}), 404
+        return error_response("Lot not found", 404)
 
     predictions = _prediction_rows(zone_rows, day=day, hour=hour)
     return jsonify(
@@ -156,11 +171,20 @@ def get_prediction(lot_id: str):
 
 @insights_bp.route("/api/v1/lots/<lot_id>/recommend", methods=["GET"])
 @jwt_required()
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_recommendation(lot_id: str):
-    """Return a Day 8 mock zone recommendation for a destination."""
+    """Return a mock zone recommendation for a destination."""
+    _, auth_error = get_current_user_from_jwt()
+    if auth_error:
+        return auth_error
+
     destination = request.args.get("destination", "").strip()
     if not destination:
-        return jsonify({"error": "destination query parameter is required"}), 400
+        return error_response(
+            "destination query parameter is required",
+            400,
+            code="validation_error",
+        )
 
     parsed = _parse_day_and_time()
     if parsed[0] is None:
@@ -169,7 +193,7 @@ def get_recommendation(lot_id: str):
 
     lot, zone_rows = _lot_zone_snapshot(lot_id)
     if lot is None:
-        return jsonify({"error": "Lot not found"}), 404
+        return error_response("Lot not found", 404)
 
     predictions = _prediction_rows(zone_rows, day=day, hour=hour)
 
@@ -216,36 +240,12 @@ def get_recommendation(lot_id: str):
     )
 
 
-def _require_admin_user() -> tuple[User | None, Any | None]:
-    identity = get_jwt_identity()
-    if identity is None:
-        return None, (jsonify({"error": "Authentication required"}), 401)
-
-    try:
-        user_id = int(identity)
-    except (TypeError, ValueError):
-        return None, (jsonify({"error": "Invalid authentication context"}), 401)
-
-    user = db.session.get(User, user_id)
-
-    if user is None:
-        return None, (jsonify({"error": "User not found"}), 404)
-
-    if user.role != "admin":
-        return None, (jsonify({"error": "Admin access required"}), 403)
-
-    return user, None
-
-
 @insights_bp.route("/api/admin/sensors", methods=["GET"])
 @insights_bp.route("/api/v1/admin/sensors", methods=["GET"])
-@jwt_required()
+@require_roles("admin", error_message="Admin access required")
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_admin_sensors():
     """Return sensor fleet health summary for admin dashboards."""
-    _, access_error = _require_admin_user()
-    if access_error:
-        return access_error
-
     offline_after_seconds = request.args.get("offline_after_seconds", 90, type=int)
     offline_after_seconds = max(30, min(offline_after_seconds, 600))
     stale_cutoff = datetime.utcnow() - timedelta(seconds=offline_after_seconds)
@@ -354,13 +354,10 @@ def get_admin_sensors():
 
 @insights_bp.route("/api/admin/analytics", methods=["GET"])
 @insights_bp.route("/api/v1/admin/analytics", methods=["GET"])
-@jwt_required()
+@require_roles("admin", error_message="Admin access required")
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_admin_analytics():
     """Return historical analytics summary for admin dashboards."""
-    _, access_error = _require_admin_user()
-    if access_error:
-        return access_error
-
     days = request.args.get("days", 7, type=int)
     days = max(1, min(days, 30))
     window_start = datetime.utcnow() - timedelta(days=days)
@@ -397,10 +394,7 @@ def get_admin_analytics():
         if event.timestamp:
             hourly_counter[event.timestamp.hour] += 1
 
-    hourly_distribution = [
-        {"hour": hour, "events": hourly_counter.get(hour, 0)}
-        for hour in range(24)
-    ]
+    hourly_distribution = [{"hour": hour, "events": hourly_counter.get(hour, 0)} for hour in range(24)]
 
     if events:
         peak_hour = max(range(24), key=lambda hour: hourly_counter.get(hour, 0))
@@ -439,3 +433,51 @@ def get_admin_analytics():
             "generated_at": datetime.utcnow().isoformat(),
         }
     )
+
+
+@insights_bp.route("/api/notifications/stream", methods=["GET"])
+@insights_bp.route("/api/v1/notifications/stream", methods=["GET"])
+@jwt_required()
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_SSE", "20 per minute"))
+def stream_notifications():
+    """Stream live slot-change notifications over SSE for authenticated users."""
+    user, auth_error = get_current_user_from_jwt()
+    if auth_error:
+        return auth_error
+
+    lot_filter = request.args.get("lot_id", "").strip() or None
+    heartbeat_interval = max(5, int(current_app.config.get("SSE_HEARTBEAT_INTERVAL_SECONDS", 15)))
+
+    subscriber_id, queue = broadcaster.subscribe()
+    connected_at = datetime.utcnow().isoformat()
+
+    def generate_events():
+        try:
+            yield _format_sse(
+                "connected",
+                {
+                    "type": "connected",
+                    "connected_at": connected_at,
+                    "user_id": user.id,
+                },
+            )
+            while True:
+                try:
+                    event = queue.get(timeout=heartbeat_interval)
+                except Empty:
+                    yield _format_sse("ping", {"type": "ping", "timestamp": datetime.utcnow().isoformat()})
+                    continue
+
+                if lot_filter and event.get("lot_id") != lot_filter:
+                    continue
+
+                event_name = str(event.get("type", "message"))
+                yield _format_sse(event_name, event)
+        finally:
+            broadcaster.unsubscribe(subscriber_id)
+
+    response = Response(stream_with_context(generate_events()), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
