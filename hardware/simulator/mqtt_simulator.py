@@ -110,6 +110,13 @@ class ParkingSimulator:
             lot_id: {slot: random.choice([True, False]) for slot in SLOTS}
             for lot_id in self.lot_ids
         }
+        self.last_distances: Dict[str, Dict[str, float]] = {
+            lot_id: {
+                slot: self._generate_distance(self.slot_states[lot_id][slot])
+                for slot in SLOTS
+            }
+            for lot_id in self.lot_ids
+        }
         self.failure_cycles_remaining: Dict[str, Dict[str, int]] = {
             lot_id: {slot: 0 for slot in SLOTS}
             for lot_id in self.lot_ids
@@ -201,6 +208,7 @@ class ParkingSimulator:
         """Publish a single slot update to MQTT."""
         is_occupied = self.slot_states[lot_id][slot]
         distance = self._generate_distance(is_occupied)
+        self.last_distances[lot_id][slot] = distance
 
         payload = {
             "distance_cm": distance,
@@ -230,10 +238,20 @@ class ParkingSimulator:
 
     def _publish_heartbeat(self, lot_id: str) -> None:
         """Publish device heartbeat."""
+        slots = [
+            {
+                "slot_id": slot,
+                "distance_cm": self.last_distances[lot_id][slot],
+                "occupied": self.slot_states[lot_id][slot],
+            }
+            for slot in SLOTS
+            if self.failure_cycles_remaining[lot_id][slot] <= 0
+        ]
         payload = {
             "device": "simulator",
             "uptime": int(time.time()),
             "wifi_rssi": random.randint(-70, -40),
+            "slots": slots,
         }
         topic = f"prism/{lot_id}/heartbeat"
         self.client.publish(topic, json.dumps(payload))

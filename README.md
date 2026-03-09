@@ -18,14 +18,19 @@ Parking Resource Intelligence and Slot Management (PRISM) is a smart parking sys
 
 ```text
 prism/
+├── .github/
+│   └── workflows/
 ├── backend/
 │   ├── app/
 │   │   ├── models/
 │   │   ├── routes/
 │   │   └── services/
+│   ├── docker/
 │   ├── migrations/
+│   ├── scripts/
 │   ├── tests/
 │   ├── .env.example
+│   ├── docker-compose.realtime.yml
 │   ├── requirements.txt
 │   └── run.py
 ├── frontend/
@@ -36,12 +41,12 @@ prism/
 │       └── types/        # TypeScript interfaces
 ├── hardware/
 │   ├── esp32/
-│   ├── schematics/
+│   ├── simulator/
+│   ├── sketches/
 │   └── tinkercad/
 ├── data/
 ├── docs/
-├── ml/
-└── scripts/
+└── ml/
 ```
 
 ## Implemented API Endpoints
@@ -101,10 +106,15 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+docker compose -f docker-compose.realtime.yml up -d
 FLASK_APP=app flask db upgrade
 flask seed-campus
 python run.py
 ```
+
+If you want an external simulator or another trusted client to reach Mosquitto, set
+`PRISM_MQTT_BIND_ADDRESS` before `docker compose up`. Keep the default `127.0.0.1`
+unless you intentionally need remote broker access.
 
 ### Frontend
 
@@ -115,14 +125,18 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000` to view the dashboard.
+Open `http://localhost:3000` to view the dashboard. For live slot activity, run either
+the ESP32 firmware or the MQTT simulator so the backend receives slot telemetry.
 
 ## Testing
 
 ```bash
-# MQTT connectivity test
-python3 tests/test_mqtt_integration.py
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-# Run all tests
+# Run all backend tests.
+# The realtime tests will start and stop Redis + Mosquitto through Docker Compose.
 pytest tests/ -v
 ```

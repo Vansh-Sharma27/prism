@@ -1,130 +1,157 @@
-"""
-MQTT Integration Tests for PRISM backend.
+"""MQTT integration tests for the compose-backed Mosquitto broker."""
 
-Tests the MQTTService's ability to receive and process sensor messages.
-Run with: pytest tests/test_mqtt_integration.py -v
-"""
+from __future__ import annotations
+
 import json
 import time
-try:
-    import pytest
-except ImportError:
-    pytest = None
+
 import paho.mqtt.client as mqtt
 
-# MQTT Configuration
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
+
+def _mqtt_target(realtime_stack) -> tuple[str, int]:
+    return realtime_stack["mqtt_host"], realtime_stack["mqtt_port"]
 
 
-def publish_slot_update(lot_id: str, slot_id: str, distance_cm: float, occupied: bool = None):
+def _publish_and_disconnect(client: mqtt.Client, topic: str, payload: str) -> None:
+    client.loop_start()
+    result = client.publish(topic, payload)
+    result.wait_for_publish(timeout=5)
+    client.loop_stop()
+    client.disconnect()
+
+
+def publish_slot_update(
+    lot_id: str,
+    slot_id: str,
+    distance_cm: float,
+    *,
+    mqtt_host: str,
+    mqtt_port: int,
+    occupied: bool | None = None,
+):
     """Helper to publish a slot update message."""
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.connect(mqtt_host, mqtt_port, 60)
 
     payload = {
         "distance_cm": distance_cm,
-        "timestamp": int(time.time())
+        "timestamp": int(time.time()),
     }
     if occupied is not None:
         payload["occupied"] = occupied
 
     topic = f"prism/{lot_id}/slot/{slot_id}"
-    client.publish(topic, json.dumps(payload))
-    client.disconnect()
+    _publish_and_disconnect(client, topic, json.dumps(payload))
     return topic, payload
 
 
-def publish_heartbeat(lot_id: str, device: str, uptime: int, wifi_rssi: int):
+def publish_heartbeat(
+    lot_id: str,
+    device: str,
+    uptime: int,
+    wifi_rssi: int,
+    *,
+    mqtt_host: str,
+    mqtt_port: int,
+    slots: list[dict[str, object]] | None = None,
+):
     """Helper to publish a heartbeat message."""
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.connect(mqtt_host, mqtt_port, 60)
 
     payload = {
         "device": device,
         "uptime": uptime,
-        "wifi_rssi": wifi_rssi
+        "wifi_rssi": wifi_rssi,
     }
+    if slots is not None:
+        payload["slots"] = slots
 
     topic = f"prism/{lot_id}/heartbeat"
-    client.publish(topic, json.dumps(payload))
-    client.disconnect()
+    _publish_and_disconnect(client, topic, json.dumps(payload))
     return topic, payload
 
 
 class TestMQTTConnectivity:
     """Test MQTT broker connectivity."""
 
-    def test_broker_connection(self):
+    def test_broker_connection(self, realtime_stack):
         """Verify MQTT broker is reachable."""
+        mqtt_host, mqtt_port = _mqtt_target(realtime_stack)
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         connected = False
 
         def on_connect(client, userdata, flags, reason_code, properties):
             nonlocal connected
-            connected = (reason_code == 0)
+            connected = reason_code == 0
 
         client.on_connect = on_connect
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        client.connect(mqtt_host, mqtt_port, 60)
         client.loop_start()
         time.sleep(1)
         client.loop_stop()
         client.disconnect()
 
-        assert connected, "Failed to connect to MQTT broker"
+        assert connected, f"Failed to connect to MQTT broker at {mqtt_host}:{mqtt_port}"
 
-    def test_publish_subscribe(self):
+    def test_publish_subscribe(self, realtime_stack):
         """Verify basic pub/sub works."""
+        mqtt_host, mqtt_port = _mqtt_target(realtime_stack)
         received_messages = []
 
         def on_message(client, userdata, msg):
             received_messages.append(msg.payload.decode())
 
-        # Subscribe
         sub_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         sub_client.on_message = on_message
-        sub_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        sub_client.connect(mqtt_host, mqtt_port, 60)
         sub_client.subscribe("test/prism/#")
         sub_client.loop_start()
 
         time.sleep(0.5)
 
-        # Publish
         pub_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        pub_client.connect(MQTT_BROKER, MQTT_PORT, 60)
-        pub_client.publish("test/prism/ping", "pong")
-        pub_client.disconnect()
+        pub_client.connect(mqtt_host, mqtt_port, 60)
+        _publish_and_disconnect(pub_client, "test/prism/ping", "pong")
 
         time.sleep(0.5)
         sub_client.loop_stop()
         sub_client.disconnect()
 
-        assert len(received_messages) == 1
-        assert received_messages[0] == "pong"
+        assert received_messages == ["pong"]
 
 
 class TestPRISMTopics:
     """Test PRISM-specific topic patterns."""
 
-    def test_slot_update_topic_format(self):
+    def test_slot_update_topic_format(self, realtime_stack):
         """Verify slot update message format."""
+        mqtt_host, mqtt_port = _mqtt_target(realtime_stack)
         received = []
 
         def on_message(client, userdata, msg):
-            received.append({
-                "topic": msg.topic,
-                "payload": json.loads(msg.payload.decode())
-            })
+            received.append(
+                {
+                    "topic": msg.topic,
+                    "payload": json.loads(msg.payload.decode()),
+                }
+            )
 
         sub_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         sub_client.on_message = on_message
-        sub_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        sub_client.connect(mqtt_host, mqtt_port, 60)
         sub_client.subscribe("prism/+/slot/+")
         sub_client.loop_start()
 
         time.sleep(0.5)
 
-        topic, payload = publish_slot_update("lot-test-topic", "slot-test-1", 8.5)
+        topic, payload = publish_slot_update(
+            "lot-test-topic",
+            "slot-test-1",
+            8.5,
+            mqtt_host=mqtt_host,
+            mqtt_port=mqtt_port,
+        )
 
         time.sleep(0.5)
         sub_client.loop_stop()
@@ -135,25 +162,39 @@ class TestPRISMTopics:
         assert matching[-1]["payload"]["distance_cm"] == payload["distance_cm"]
         assert "timestamp" in matching[-1]["payload"]
 
-    def test_heartbeat_topic_format(self):
+    def test_heartbeat_topic_format(self, realtime_stack):
         """Verify heartbeat message format."""
+        mqtt_host, mqtt_port = _mqtt_target(realtime_stack)
         received = []
 
         def on_message(client, userdata, msg):
-            received.append({
-                "topic": msg.topic,
-                "payload": json.loads(msg.payload.decode())
-            })
+            received.append(
+                {
+                    "topic": msg.topic,
+                    "payload": json.loads(msg.payload.decode()),
+                }
+            )
 
         sub_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         sub_client.on_message = on_message
-        sub_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        sub_client.connect(mqtt_host, mqtt_port, 60)
         sub_client.subscribe("prism/+/heartbeat")
         sub_client.loop_start()
 
         time.sleep(0.5)
 
-        topic, payload = publish_heartbeat("lot-test-topic", "esp32-test-01", 12345, -62)
+        topic, payload = publish_heartbeat(
+            "lot-test-topic",
+            "esp32-test-01",
+            12345,
+            -62,
+            mqtt_host=mqtt_host,
+            mqtt_port=mqtt_port,
+            slots=[
+                {"slot_id": "slot-1", "distance_cm": 82.1, "occupied": False},
+                {"slot_id": "slot-2", "distance_cm": 7.4, "occupied": True},
+            ],
+        )
 
         time.sleep(0.5)
         sub_client.loop_stop()
@@ -164,37 +205,11 @@ class TestPRISMTopics:
         assert matching[-1]["payload"]["device"] == payload["device"]
         assert matching[-1]["payload"]["uptime"] == payload["uptime"]
         assert matching[-1]["payload"]["wifi_rssi"] == payload["wifi_rssi"]
+        assert matching[-1]["payload"]["slots"] == payload["slots"]
 
     def test_occupied_threshold(self):
         """Test occupancy detection threshold (15cm)."""
-        # Distance < 15cm should be occupied
         assert 8.5 < 15, "8.5cm should trigger occupied"
         assert 4.0 < 15, "4.0cm should trigger occupied"
-
-        # Distance >= 15cm should be vacant
         assert 15.0 >= 15, "15.0cm should be vacant"
         assert 100.0 >= 15, "100.0cm should be vacant"
-
-
-if __name__ == "__main__":
-    # Quick standalone test
-    print("Testing MQTT connectivity...")
-
-    try:
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        client.connect(MQTT_BROKER, MQTT_PORT, 60)
-        print(f"✓ Connected to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
-
-        # Test slot update
-        topic, payload = publish_slot_update("lot-a", "slot-1", 8.5, True)
-        print(f"✓ Published slot update to {topic}")
-
-        # Test heartbeat
-        topic, payload = publish_heartbeat("lot-a", "esp32-01", 12345, -62)
-        print(f"✓ Published heartbeat to {topic}")
-
-        print("\nAll MQTT tests passed!")
-
-    except Exception as e:
-        print(f"✗ MQTT test failed: {e}")
-        exit(1)

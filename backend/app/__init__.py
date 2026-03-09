@@ -65,6 +65,11 @@ def create_app(config_name=None):
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///prism_dev.db")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = jwt_secret
+    app.config["REDIS_URL"] = os.getenv("PRISM_REDIS_URL", "redis://localhost:6379/0")
+    app.config["RATELIMIT_STORAGE_URI"] = os.getenv(
+        "PRISM_RATE_LIMIT_STORAGE_URI",
+        app.config["REDIS_URL"],
+    )
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
         hours=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 24))
     )
@@ -92,6 +97,11 @@ def create_app(config_name=None):
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
     app.config["CAMERA_UPLOAD_TOKEN"] = os.getenv("PRISM_CAMERA_UPLOAD_TOKEN", "")
+    app.config["NOTIFICATIONS_BACKEND"] = os.getenv("PRISM_NOTIFICATIONS_BACKEND", "redis")
+    app.config["NOTIFICATIONS_REDIS_CHANNEL"] = os.getenv(
+        "PRISM_NOTIFICATIONS_REDIS_CHANNEL",
+        "prism:notifications",
+    )
 
     # Logging baseline
     log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -103,6 +113,10 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
+
+    from app.services.notifications import configure_notification_broker
+
+    configure_notification_broker(app)
 
     allowed_origins = [
         origin.strip()

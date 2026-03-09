@@ -15,8 +15,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_file = tmp_path / "auth_security_test.db"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "test-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-1234567890-abcdef")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-jwt-secret-key-1234567890-abcd")
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false")
 
     app = create_app()
@@ -49,8 +49,8 @@ def test_register_allows_privileged_role_when_enabled(tmp_path: Path, monkeypatc
     db_file = tmp_path / "auth_privileged_enabled.db"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "test-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-1234567890-abcdef")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-jwt-secret-key-1234567890-abcd")
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "true")
 
     app = create_app()

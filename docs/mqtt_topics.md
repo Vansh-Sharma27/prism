@@ -43,9 +43,24 @@ All topics use lowercase segments and slash-separated paths.
 {
   "device": "esp32-01",
   "uptime": 12345,
-  "wifi_rssi": -62
+  "wifi_rssi": -62,
+  "slots": [
+    {
+      "slot_id": "slot-1",
+      "distance_cm": 92.1,
+      "occupied": false
+    },
+    {
+      "slot_id": "slot-2",
+      "distance_cm": 7.8,
+      "occupied": true
+    }
+  ]
 }
 ```
+
+- `slots` is the per-slot freshness contract used by the backend to keep stable sensors online between occupancy changes.
+- If a slot is currently faulted, heartbeat may emit `{"slot_id":"slot-3","status":"offline"}` for that entry instead of distance data.
 
 Simulator outage payload extension (Day 6):
 
@@ -68,10 +83,13 @@ Simulator outage payload extension (Day 6):
 
 - Invalid JSON payloads are rejected and logged.
 - Unknown slots are ignored safely; no database write is attempted.
-- The backend writes both `sensor_readings` and `occupancy_logs` for valid slot updates.
+- The backend refreshes `parking_slots.last_telemetry_at` and `parking_slots.last_distance_cm` from both slot updates and heartbeat slot snapshots.
+- The backend writes `sensor_readings` for heartbeat snapshots that include a valid distance payload.
+- The backend writes `occupancy_logs` only when occupancy state changes.
 
 ## Security Notes (Planned)
 
 - enforce broker credentials in production
 - enforce topic-level ACL per device
 - use TLS-enabled broker endpoint for cloud deployment
+- avoid exposing `1883` beyond loopback unless the host firewall and broker auth are configured intentionally

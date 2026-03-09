@@ -18,8 +18,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_file = tmp_path / "phase2_hardening.db"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "phase2-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "phase2-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "phase2-secret-key-1234567890-abcde")
+    monkeypatch.setenv("JWT_SECRET_KEY", "phase2-jwt-secret-key-1234567890")
     monkeypatch.setenv("PRISM_ALLOW_PUBLIC_READS", "false")
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false")
     monkeypatch.setenv("PRISM_RATE_LIMIT_AUTH_LOGIN", "3 per minute")
@@ -155,6 +155,30 @@ def test_batch_status_update_supports_partial_failures(client):
     assert slot_response.get_json()["is_occupied"] is True
 
 
+def test_manual_slot_update_refreshes_telemetry_for_admin_sensor_health(client):
+    admin_headers = _auth_headers(client, "admin@prism.local", "Admin@12345")
+
+    update_response = client.put(
+        "/api/v1/slots/lot-a-slot-2/status",
+        headers=admin_headers,
+        json={"distance_cm": 11.4, "is_occupied": True},
+    )
+    assert update_response.status_code == 200
+
+    with client.application.app_context():
+        slot = db.session.get(ParkingSlot, "lot-a-slot-2")
+        assert slot is not None
+        assert slot.last_telemetry_at is not None
+        assert slot.last_distance_cm == pytest.approx(11.4)
+
+    sensors_response = client.get("/api/v1/admin/sensors?offline_after_seconds=600", headers=admin_headers)
+    assert sensors_response.status_code == 200
+    sensors = {row["sensor_id"]: row for row in sensors_response.get_json()["sensors"]}
+
+    assert sensors["lot-a-sensor-2"]["status"] == "online"
+    assert sensors["lot-a-sensor-2"]["last_distance_cm"] == pytest.approx(11.4)
+
+
 def test_event_filter_queries_are_deterministic(client):
     headers = _auth_headers(client, "faculty@prism.local", "Faculty@12345")
     query = (
@@ -212,5 +236,3 @@ def test_sse_stream_delivers_slot_change_events(client):
 
     stream.close()
     assert found_slot_change
-
-
