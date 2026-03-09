@@ -386,6 +386,7 @@ Success response (`200`):
 
 Notes:
 
+- Supplying `distance_cm` refreshes `latest_distance_cm` / `last_reading_at` even when occupancy does not change.
 - If occupancy state changes, backend creates an event (`entry` or `exit`) and occupancy log row.
 
 Common errors:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from collections import Counter
 from datetime import datetime, timedelta
-from queue import Empty
 from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
@@ -16,7 +15,7 @@ from app import db, limiter
 from app.authz import get_current_user_from_jwt, require_roles
 from app.models.parking import OccupancyLog, ParkingEvent, ParkingLot, ParkingSlot, Zone
 from app.responses import error_response
-from app.services.notifications import broadcaster
+from app.services.notifications import get_notification_broker
 
 insights_bp = Blueprint("insights", __name__)
 
@@ -251,40 +250,6 @@ def get_admin_sensors():
     stale_cutoff = datetime.utcnow() - timedelta(seconds=offline_after_seconds)
     uptime_window_start = datetime.utcnow() - timedelta(hours=24)
 
-    latest_ts_subq = (
-        db.session.query(
-            OccupancyLog.slot_id.label("slot_id"),
-            func.max(OccupancyLog.timestamp).label("latest_ts"),
-        )
-        .group_by(OccupancyLog.slot_id)
-        .subquery()
-    )
-
-    latest_rows = (
-        db.session.query(
-            OccupancyLog.slot_id,
-            OccupancyLog.timestamp,
-            OccupancyLog.distance_cm,
-            OccupancyLog.status,
-        )
-        .join(
-            latest_ts_subq,
-            (OccupancyLog.slot_id == latest_ts_subq.c.slot_id)
-            & (OccupancyLog.timestamp == latest_ts_subq.c.latest_ts),
-        )
-        .all()
-    )
-    latest_map = {row.slot_id: row for row in latest_rows}
-    slots_seen_24h = {
-        slot_id
-        for (slot_id,) in (
-            db.session.query(OccupancyLog.slot_id)
-            .filter(OccupancyLog.timestamp >= uptime_window_start)
-            .distinct()
-            .all()
-        )
-    }
-
     sensors: dict[str, dict[str, Any]] = {}
     for slot in ParkingSlot.query.order_by(ParkingSlot.sensor_id.asc(), ParkingSlot.slot_number.asc()).all():
         sensor_id = slot.sensor_id or f"{slot.lot_id}-sensor-{slot.slot_number}"
@@ -303,8 +268,7 @@ def get_admin_sensors():
             }
             sensors[sensor_id] = sensor_row
 
-        latest = latest_map.get(slot.id)
-        last_seen = latest.timestamp if latest else None
+        last_seen = slot.last_telemetry_at
         is_offline = last_seen is None or last_seen < stale_cutoff
 
         sensor_row["total_slots"] += 1
@@ -312,14 +276,14 @@ def get_admin_sensors():
             sensor_row["occupied_slots"] += 1
         if is_offline:
             sensor_row["offline_slots"] += 1
-        if slot.id in slots_seen_24h:
+        if last_seen and last_seen >= uptime_window_start:
             sensor_row["slots_seen_24h"] += 1
 
-        if latest and (
-            sensor_row["last_seen_at"] is None or latest.timestamp > sensor_row["last_seen_at"]
+        if last_seen and (
+            sensor_row["last_seen_at"] is None or last_seen > sensor_row["last_seen_at"]
         ):
-            sensor_row["last_seen_at"] = latest.timestamp
-            sensor_row["last_distance_cm"] = latest.distance_cm
+            sensor_row["last_seen_at"] = last_seen
+            sensor_row["last_distance_cm"] = slot.last_distance_cm
 
         sensor_row["slots"].append(
             {
@@ -328,8 +292,8 @@ def get_admin_sensors():
                 "zone_id": slot.zone_id,
                 "slot_number": slot.slot_number,
                 "is_occupied": slot.is_occupied,
-                "last_seen_at": latest.timestamp.isoformat() if latest else None,
-                "last_distance_cm": latest.distance_cm if latest else None,
+                "last_seen_at": last_seen.isoformat() if last_seen else None,
+                "last_distance_cm": slot.last_distance_cm,
                 "telemetry_status": "offline" if is_offline else "online",
             }
         )
@@ -466,7 +430,7 @@ def stream_notifications():
     lot_filter = request.args.get("lot_id", "").strip() or None
     heartbeat_interval = max(5, int(current_app.config.get("SSE_HEARTBEAT_INTERVAL_SECONDS", 15)))
 
-    subscriber_id, queue = broadcaster.subscribe()
+    subscription = get_notification_broker().subscribe()
     connected_at = datetime.utcnow().isoformat()
 
     def generate_events():
@@ -480,9 +444,8 @@ def stream_notifications():
                 },
             )
             while True:
-                try:
-                    event = queue.get(timeout=heartbeat_interval)
-                except Empty:
+                event = subscription.get(timeout=heartbeat_interval)
+                if event is None:
                     yield _format_sse("ping", {"type": "ping", "timestamp": datetime.utcnow().isoformat()})
                     continue
 
@@ -492,7 +455,7 @@ def stream_notifications():
                 event_name = str(event.get("type", "message"))
                 yield _format_sse(event_name, event)
         finally:
-            broadcaster.unsubscribe(subscriber_id)
+            subscription.close()
 
     response = Response(stream_with_context(generate_events()), mimetype="text/event-stream")
     response.headers["Cache-Control"] = "no-cache"

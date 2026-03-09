@@ -14,7 +14,7 @@ from app.authz import require_roles
 from app.models.parking import OccupancyLog, ParkingEvent, ParkingSlot
 from app.responses import error_response
 from app.schemas import slot_status_schema
-from app.services.notifications import publish_slot_change
+from app.services.notifications import build_slot_change_event, publish_notification_event
 
 slots_bp = Blueprint("slots", __name__)
 
@@ -56,10 +56,22 @@ def _parse_iso_datetime(raw_value: str | None, field_name: str) -> tuple[datetim
     return parsed, None
 
 
-def _apply_slot_update(slot: ParkingSlot, data: dict, *, source: str) -> tuple[bool, bool]:
-    """Apply a single slot update and emit event/log rows if occupancy changed."""
+def _apply_slot_update(
+    slot: ParkingSlot,
+    data: dict,
+    *,
+    source: str,
+) -> tuple[bool, bool, dict | None]:
+    """Apply a single slot update and return a pending notification if occupancy changed."""
     touched = False
     changed_occupancy = False
+    notification_event = None
+    distance_cm = data.get("distance_cm")
+
+    if "distance_cm" in data:
+        slot.last_distance_cm = distance_cm
+        slot.last_telemetry_at = datetime.utcnow()
+        touched = True
 
     if "is_occupied" in data:
         incoming_status = data["is_occupied"]
@@ -68,15 +80,16 @@ def _apply_slot_update(slot: ParkingSlot, data: dict, *, source: str) -> tuple[b
             touched = True
             slot.is_occupied = incoming_status
             changed_occupancy = True
-            slot.last_status_change = datetime.utcnow()
+            event_at = slot.last_telemetry_at or datetime.utcnow()
+            slot.last_status_change = event_at
             event_type = "entry" if slot.is_occupied else "exit"
-            distance_cm = data.get("distance_cm")
 
             db.session.add(
                 ParkingEvent(
                     slot_id=slot.id,
                     event_type=event_type,
                     sensor_distance_cm=distance_cm,
+                    timestamp=event_at,
                 )
             )
             db.session.add(
@@ -84,9 +97,10 @@ def _apply_slot_update(slot: ParkingSlot, data: dict, *, source: str) -> tuple[b
                     slot_id=slot.id,
                     status="occupied" if slot.is_occupied else "vacant",
                     distance_cm=distance_cm,
+                    timestamp=event_at,
                 )
             )
-            publish_slot_change(
+            notification_event = build_slot_change_event(
                 slot_id=slot.id,
                 lot_id=slot.lot_id,
                 zone_id=slot.zone_id,
@@ -102,7 +116,7 @@ def _apply_slot_update(slot: ParkingSlot, data: dict, *, source: str) -> tuple[b
             touched = True
             slot.is_reserved = incoming_reserved
 
-    return touched, changed_occupancy
+    return touched, changed_occupancy, notification_event
 
 
 @slots_bp.route("/slots")
@@ -161,8 +175,10 @@ def update_slot_status(slot_id):
     except ValidationError as err:
         return error_response("Validation failed", 400, code="validation_error", details=err.messages)
 
-    touched, changed_occupancy = _apply_slot_update(slot, data, source="api")
+    touched, changed_occupancy, notification_event = _apply_slot_update(slot, data, source="api")
     db.session.commit()
+    if notification_event:
+        publish_notification_event(notification_event)
 
     return jsonify(
         {
@@ -192,6 +208,7 @@ def batch_update_slot_status():
     updated = 0
     unchanged = 0
     failed = 0
+    pending_notifications = []
 
     for index, item in enumerate(updates):
         if not isinstance(item, dict):
@@ -263,11 +280,14 @@ def batch_update_slot_status():
             )
             continue
 
-        touched, changed_occupancy = _apply_slot_update(slot, data, source="api_batch")
+        touched, changed_occupancy, notification_event = _apply_slot_update(slot, data, source="api_batch")
         if touched:
             updated += 1
         else:
             unchanged += 1
+
+        if notification_event:
+            pending_notifications.append(notification_event)
 
         results.append(
             {
@@ -279,6 +299,8 @@ def batch_update_slot_status():
         )
 
     db.session.commit()
+    for notification_event in pending_notifications:
+        publish_notification_event(notification_event)
 
     summary = {
         "requested": len(updates),

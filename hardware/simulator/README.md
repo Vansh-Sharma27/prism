@@ -54,12 +54,12 @@ python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 
 - Occupied slots report distances of 3-12 cm
 - Vacant slots report distances of 50-150 cm
 - Publishes to `prism/{lot_id}/slot/{slot_id}` topics
-- Sends heartbeat every 30 seconds
+- Sends heartbeat every 30 seconds with per-slot snapshots so stable sensors stay fresh
 
 ## Testing with Backend
 
-1. Start Mosquitto broker: `sudo systemctl start mosquitto`
-2. Start backend: `cd ../backend && python run.py`
+1. Start Redis + Mosquitto: `cd ../../backend && docker compose -f docker-compose.realtime.yml up -d`
+2. Start backend: `cd ../../backend && python run.py`
 3. Run simulator: `python mqtt_simulator.py`
 4. Watch backend logs for slot updates
 
@@ -68,7 +68,7 @@ python mqtt_simulator.py --mode dynamic --failure-probability 0.03 --cycles 240 
 After running simulator long enough to generate data, export backend `occupancy_logs`:
 
 ```bash
-cd ../backend
+cd ../../backend
 python scripts/export_occupancy_logs.py --output ../data/processed/day6_occupancy_logs.csv
 ```
 

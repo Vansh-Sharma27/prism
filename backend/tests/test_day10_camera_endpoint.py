@@ -16,8 +16,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     upload_dir = tmp_path / "uploads"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "day10-camera-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "day10-camera-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "day10-camera-secret-key-1234567890")
+    monkeypatch.setenv("JWT_SECRET_KEY", "day10-camera-jwt-secret-key-123456")
     monkeypatch.setenv("PRISM_ALLOW_PUBLIC_READS", "false")
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false")
     monkeypatch.setenv("PRISM_CAMERA_UPLOAD_TOKEN", "camera-shared-token")

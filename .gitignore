@@ -41,6 +41,8 @@ env/
 !**/.env.example
 backend/instance/
 *.db
+*.sqlite
+*.sqlite3
 
 # Logs
 logs/
@@ -54,6 +56,8 @@ frontend/node_modules/
 # Build outputs
 frontend/.next/
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
 *.min.js
 *.min.css
 next-env.d.ts
@@ -78,6 +82,8 @@ coverage.xml
 
 # Testing
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .tox/
 .nox/
 
