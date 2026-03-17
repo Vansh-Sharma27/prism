@@ -169,9 +169,16 @@ export function ZoneUtilizationChart({ data }: { data: ZoneUtilization[] }) {
 export function PeakHoursHeatmap({ data }: { data: HourHeatmapData[] }) {
   const chartData = useMemo(() => {
     if (!data || data.length === 0) {
+      // Deterministic mock data based on typical campus parking patterns
+      const typicalPattern: Record<number, number> = {
+        0: 15, 1: 12, 2: 10, 3: 10, 4: 12, 5: 18,
+        6: 35, 7: 55, 8: 78, 9: 85, 10: 82, 11: 70,
+        12: 65, 13: 72, 14: 75, 15: 80, 16: 85, 17: 78,
+        18: 55, 19: 40, 20: 30, 21: 25, 22: 20, 23: 18,
+      };
       return Array.from({ length: 24 }, (_, i) => ({
         hour: i,
-        avgOccupancy: Math.random() * 80 + 10,
+        avgOccupancy: typicalPattern[i] ?? 50,
       }));
     }
     return data;
@@ -225,7 +232,8 @@ export function AnalyticsCharts({ hourlyOccupancy, zoneUtilization, peakHours }:
       hourlyOccupancy ||
       Array.from({ length: 24 }, (_, i) => ({
         time: `${String(i).padStart(2, "0")}:00`,
-        occupancy: 30 + Math.sin(i * 0.5) * 25 + Math.random() * 10,
+        // Deterministic pattern: morning peak, lunch dip, afternoon peak
+        occupancy: 30 + Math.sin(i * 0.5) * 25 + (i % 3) * 3,
       })),
     [hourlyOccupancy]
   );
