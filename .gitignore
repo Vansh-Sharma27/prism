@@ -72,6 +72,7 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/combined_training.csv
 
 # Coverage
 htmlcov/
