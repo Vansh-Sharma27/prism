@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, jsonify, request
@@ -15,6 +16,8 @@ from app.models.parking import OccupancyLog, ParkingEvent, ParkingSlot
 from app.responses import error_response
 from app.schemas import slot_status_schema
 from app.services.notifications import build_slot_change_event, publish_notification_event
+
+logger = logging.getLogger(__name__)
 
 slots_bp = Blueprint("slots", __name__)
 
@@ -80,7 +83,7 @@ def _apply_slot_update(
             touched = True
             slot.is_occupied = incoming_status
             changed_occupancy = True
-            event_at = slot.last_telemetry_at or datetime.utcnow()
+            event_at = datetime.utcnow()
             slot.last_status_change = event_at
             event_type = "entry" if slot.is_occupied else "exit"
 
@@ -178,7 +181,10 @@ def update_slot_status(slot_id):
     touched, changed_occupancy, notification_event = _apply_slot_update(slot, data, source="api")
     db.session.commit()
     if notification_event:
-        publish_notification_event(notification_event)
+        try:
+            publish_notification_event(notification_event)
+        except Exception:
+            logger.exception("Post-commit notification publish failed | slot_id=%s", slot_id)
 
     return jsonify(
         {
@@ -300,7 +306,13 @@ def batch_update_slot_status():
 
     db.session.commit()
     for notification_event in pending_notifications:
-        publish_notification_event(notification_event)
+        try:
+            publish_notification_event(notification_event)
+        except Exception:
+            logger.exception(
+                "Post-commit batch notification publish failed | event=%s",
+                notification_event.get("slot_id", "unknown"),
+            )
 
     summary = {
         "requested": len(updates),

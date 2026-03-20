@@ -357,7 +357,14 @@ class MQTTService:
                 return
 
             for event in notification_events:
-                publish_notification_event(event)
+                try:
+                    publish_notification_event(event)
+                except Exception:
+                    logger.exception(
+                        "Heartbeat notification publish failed | lot_id=%s slot_id=%s",
+                        lot_id,
+                        event.get("slot_id", "unknown"),
+                    )
 
     def start(self):
         """Connect to broker and start processing."""
