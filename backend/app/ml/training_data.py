@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -66,9 +65,15 @@ def normalize_external_training_rows(rows: Sequence[dict[str, Any]]) -> list[dic
 def _normalize_klcc_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     """Normalize KLCC-format rows into canonical training schema."""
     result: list[dict[str, Any]] = []
-    for row in rows:
-        capacity = int(row["capacity"])
-        available = int(row["available"])
+    for i, row in enumerate(rows):
+        try:
+            capacity = int(row["capacity"])
+            available = int(row["available"])
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"Row {i}: non-numeric capacity/available: "
+                f"capacity={row.get('capacity')!r}, available={row.get('available')!r}"
+            ) from exc
         occupied = max(0, capacity - available)
         occupancy_pct = round((occupied / capacity) * 100, 1) if capacity > 0 else 0.0
         iso_str = _normalize_iso(str(row["datetime"]))
@@ -120,7 +125,7 @@ def merge_training_datasets(
 ) -> list[dict[str, Any]]:
     """Merge PRISM-exported and external training rows, sorted by timestamp."""
     combined = list(prism_rows) + list(external_rows)
-    combined.sort(key=lambda r: str(r.get("timestamp_iso", "")))
+    combined.sort(key=lambda r: int(r.get("timestamp_unix", 0)))
     return combined
 
 

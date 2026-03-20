@@ -83,18 +83,21 @@ def _aggregate_readings_to_zone_buckets(
     zone-level occupancy percentage, average distance, and coverage.
     """
     # Step 1: collect latest reading per (zone_id, bucket, slot_id)
-    slot_zone_map: dict[str, tuple[str, str, int]] = {}  # slot_id -> (lot_id, zone_id, zone_total_slots)
     zone_total_slots: dict[str, int] = {}
 
-    # Pre-compute zone slot counts
+    # Pre-compute zone slot counts and slot metadata in bulk (avoids N+1 queries)
     for zone in Zone.query.all():
         count = zone.slots.count()
         zone_total_slots[zone.id] = count
 
+    slot_lookup: dict[str, ParkingSlot] = {
+        slot.id: slot for slot in ParkingSlot.query.all()
+    }
+
     latest_per_slot: dict[tuple[str, datetime, str], dict[str, Any]] = {}  # (zone_id, bucket, slot_id) -> data
 
     for reading in readings:
-        slot: ParkingSlot | None = db.session.get(ParkingSlot, reading.slot_id)
+        slot = slot_lookup.get(reading.slot_id)
         if slot is None or slot.zone_id is None:
             continue
 

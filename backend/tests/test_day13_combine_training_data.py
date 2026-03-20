@@ -183,3 +183,18 @@ def test_validate_canonical_row_passes_valid_row():
 def test_normalize_external_training_rows_handles_empty_input():
     result = normalize_external_training_rows([])
     assert result == []
+
+
+
+def test_normalize_external_training_rows_rejects_non_numeric_capacity():
+    with pytest.raises(ValueError, match="non-numeric capacity/available"):
+        normalize_external_training_rows(
+            [
+                {
+                    "datetime": "2026-03-16T09:00:00+00:00",
+                    "location": "klcc-north",
+                    "capacity": "abc",
+                    "available": "50",
+                }
+            ]
+        )

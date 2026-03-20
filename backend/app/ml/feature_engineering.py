@@ -6,9 +6,9 @@ encodings, lag features, and rolling statistics grouped by zone.
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from app.ml.training_data import CANONICAL_TRAINING_COLUMNS
@@ -56,10 +56,10 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     out["day_of_week"] = out["_ts"].dt.dayofweek
     out["is_weekend"] = (out["day_of_week"] >= 5).astype(int)
 
-    out["hour_sin"] = out["hour_of_day"].apply(lambda h: math.sin(2 * math.pi * h / 24))
-    out["hour_cos"] = out["hour_of_day"].apply(lambda h: math.cos(2 * math.pi * h / 24))
-    out["dow_sin"] = out["day_of_week"].apply(lambda d: math.sin(2 * math.pi * d / 7))
-    out["dow_cos"] = out["day_of_week"].apply(lambda d: math.cos(2 * math.pi * d / 7))
+    out["hour_sin"] = np.sin(2 * np.pi * out["hour_of_day"] / 24)
+    out["hour_cos"] = np.cos(2 * np.pi * out["hour_of_day"] / 24)
+    out["dow_sin"] = np.sin(2 * np.pi * out["day_of_week"] / 7)
+    out["dow_cos"] = np.cos(2 * np.pi * out["day_of_week"] / 7)
 
     out["occupancy_pct"] = pd.to_numeric(out["occupancy_pct"], errors="coerce")
     out["occupancy_pct_lag_1"] = out.groupby("zone_id")["occupancy_pct"].shift(1)
