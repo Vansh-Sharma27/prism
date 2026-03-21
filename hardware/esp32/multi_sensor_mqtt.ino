@@ -38,15 +38,16 @@ struct Sensor {
   int echoPin;
   const char* slotId;
   bool lastState;
+  float lastDistanceCm;
   unsigned long lastChangeTime;
   unsigned int consecutiveErrors;
   unsigned long lastErrorPublish;
 };
 
 Sensor sensors[] = {
-  {5, 18, "slot-1", false, 0, 0, 0},
-  {19, 21, "slot-2", false, 0, 0, 0},
-  {22, 23, "slot-3", false, 0, 0, 0}
+  {5, 18, "slot-1", false, -1.0, 0, 0, 0},
+  {19, 21, "slot-2", false, -1.0, 0, 0, 0},
+  {22, 23, "slot-3", false, -1.0, 0, 0, 0}
 };
 const int NUM_SENSORS = sizeof(sensors) / sizeof(sensors[0]);
 
@@ -66,7 +67,7 @@ const int STATUS_LED_PIN = 2;
 
 // MQTT topics
 char topicBuffer[100];
-char payloadBuffer[240];
+char payloadBuffer[640];
 
 WiFiClient wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -247,14 +248,41 @@ void publishSensorError(Sensor& sensor, const char* errorCode) {
 void publishHeartbeat() {
   snprintf(topicBuffer, sizeof(topicBuffer), "prism/%s/heartbeat", LOT_ID);
 
-  snprintf(
+  int written = snprintf(
     payloadBuffer,
     sizeof(payloadBuffer),
-    "{\"device\":\"%s\",\"uptime\":%lu,\"wifi_rssi\":%d}",
+    "{\"device\":\"%s\",\"uptime\":%lu,\"wifi_rssi\":%d,\"slots\":[",
     DEVICE_ID,
     millis() / 1000,
     WiFi.RSSI()
   );
+
+  for (int i = 0; i < NUM_SENSORS && written > 0 && written < (int)sizeof(payloadBuffer); i++) {
+    if (sensors[i].consecutiveErrors >= SENSOR_ERROR_THRESHOLD || sensors[i].lastDistanceCm < 0) {
+      written += snprintf(
+        payloadBuffer + written,
+        sizeof(payloadBuffer) - written,
+        "%s{\"slot_id\":\"%s\",\"status\":\"offline\"}",
+        i == 0 ? "" : ",",
+        sensors[i].slotId
+      );
+      continue;
+    }
+
+    written += snprintf(
+      payloadBuffer + written,
+      sizeof(payloadBuffer) - written,
+      "%s{\"slot_id\":\"%s\",\"distance_cm\":%.1f,\"occupied\":%s}",
+      i == 0 ? "" : ",",
+      sensors[i].slotId,
+      sensors[i].lastDistanceCm,
+      sensors[i].lastState ? "true" : "false"
+    );
+  }
+
+  if (written > 0 && written < (int)sizeof(payloadBuffer)) {
+    snprintf(payloadBuffer + written, sizeof(payloadBuffer) - written, "]}");
+  }
 
   bool ok = mqtt.publish(topicBuffer, payloadBuffer);
   if (!ok) {
@@ -334,6 +362,7 @@ void loop() {
 
     // Reset error streak when a valid reading arrives.
     sensors[i].consecutiveErrors = 0;
+    sensors[i].lastDistanceCm = distance;
 
     bool isOccupied = (distance < OCCUPANCY_THRESHOLD_CM);
 

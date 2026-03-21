@@ -18,8 +18,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_file = tmp_path / "phase2_hardening.db"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "phase2-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "phase2-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "phase2-secret-key-1234567890-abcde")
+    monkeypatch.setenv("JWT_SECRET_KEY", "phase2-jwt-secret-key-1234567890")
     monkeypatch.setenv("PRISM_ALLOW_PUBLIC_READS", "false")
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false")
     monkeypatch.setenv("PRISM_RATE_LIMIT_AUTH_LOGIN", "3 per minute")
@@ -155,6 +155,30 @@ def test_batch_status_update_supports_partial_failures(client):
     assert slot_response.get_json()["is_occupied"] is True
 
 
+def test_manual_slot_update_refreshes_telemetry_for_admin_sensor_health(client):
+    admin_headers = _auth_headers(client, "admin@prism.local", "Admin@12345")
+
+    update_response = client.put(
+        "/api/v1/slots/lot-a-slot-2/status",
+        headers=admin_headers,
+        json={"distance_cm": 11.4, "is_occupied": True},
+    )
+    assert update_response.status_code == 200
+
+    with client.application.app_context():
+        slot = db.session.get(ParkingSlot, "lot-a-slot-2")
+        assert slot is not None
+        assert slot.last_telemetry_at is not None
+        assert slot.last_distance_cm == pytest.approx(11.4)
+
+    sensors_response = client.get("/api/v1/admin/sensors?offline_after_seconds=600", headers=admin_headers)
+    assert sensors_response.status_code == 200
+    sensors = {row["sensor_id"]: row for row in sensors_response.get_json()["sensors"]}
+
+    assert sensors["lot-a-sensor-2"]["status"] == "online"
+    assert sensors["lot-a-sensor-2"]["last_distance_cm"] == pytest.approx(11.4)
+
+
 def test_event_filter_queries_are_deterministic(client):
     headers = _auth_headers(client, "faculty@prism.local", "Faculty@12345")
     query = (
@@ -173,6 +197,86 @@ def test_event_filter_queries_are_deterministic(client):
     assert payload["total"] == 1
     assert payload["events"][0]["slot_id"] == "lot-a-slot-1"
     assert payload["events"][0]["event_type"] == "entry"
+
+
+def test_event_filter_supports_slot_id_query_param(client):
+    headers = _auth_headers(client, "faculty@prism.local", "Faculty@12345")
+
+    response = client.get("/api/v1/events?slot_id=lot-a-slot-1&limit=10", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["total"] == 2
+    assert {event["slot_id"] for event in payload["events"]} == {"lot-a-slot-1"}
+    assert {event["event_type"] for event in payload["events"]} == {"entry", "exit"}
+
+
+def test_batch_status_update_is_idempotent_on_replay(client):
+    admin_headers = _auth_headers(client, "admin@prism.local", "Admin@12345")
+    payload = {
+        "updates": [
+            {"slot_id": "lot-a-slot-1", "is_occupied": True, "distance_cm": 7.4},
+            {"slot_id": "lot-a-slot-2", "is_reserved": True},
+        ]
+    }
+
+    with client.application.app_context():
+        baseline_entry_events = ParkingEvent.query.filter_by(
+            slot_id="lot-a-slot-1",
+            event_type="entry",
+        ).count()
+        baseline_occupied_logs = OccupancyLog.query.filter_by(
+            slot_id="lot-a-slot-1",
+            status="occupied",
+        ).count()
+
+    first = client.put("/api/v1/slots/status/batch", headers=admin_headers, json=payload)
+    assert first.status_code == 200
+    assert first.get_json()["summary"] == {
+        "requested": 2,
+        "updated": 2,
+        "unchanged": 0,
+        "failed": 0,
+    }
+
+    with client.application.app_context():
+        after_first_entry_events = ParkingEvent.query.filter_by(
+            slot_id="lot-a-slot-1",
+            event_type="entry",
+        ).count()
+        after_first_occupied_logs = OccupancyLog.query.filter_by(
+            slot_id="lot-a-slot-1",
+            status="occupied",
+        ).count()
+
+    assert after_first_entry_events == baseline_entry_events + 1
+    assert after_first_occupied_logs == baseline_occupied_logs + 1
+
+    second = client.put("/api/v1/slots/status/batch", headers=admin_headers, json=payload)
+    assert second.status_code == 200
+    second_payload = second.get_json()
+    assert second_payload["summary"] == {
+        "requested": 2,
+        "updated": 1,
+        "unchanged": 1,
+        "failed": 0,
+    }
+    assert [result["status"] for result in second_payload["results"]] == ["updated", "no_change"]
+    assert second_payload["results"][0]["changed"] is False
+    assert second_payload["results"][1]["changed"] is False
+
+    with client.application.app_context():
+        final_entry_events = ParkingEvent.query.filter_by(
+            slot_id="lot-a-slot-1",
+            event_type="entry",
+        ).count()
+        final_occupied_logs = OccupancyLog.query.filter_by(
+            slot_id="lot-a-slot-1",
+            status="occupied",
+        ).count()
+
+    assert final_entry_events == after_first_entry_events
+    assert final_occupied_logs == after_first_occupied_logs
 
 
 def test_sse_stream_requires_authentication(client):
@@ -214,3 +318,16 @@ def test_sse_stream_delivers_slot_change_events(client):
     assert found_slot_change
 
 
+def test_sse_stream_allows_non_admin_authenticated_users(client):
+    faculty_headers = _auth_headers(client, "faculty@prism.local", "Faculty@12345")
+
+    stream = client.get(
+        "/api/v1/notifications/stream?lot_id=lot-a",
+        headers=faculty_headers,
+        buffered=False,
+    )
+
+    assert stream.status_code == 200
+    connected_chunk = next(stream.response).decode("utf-8")
+    stream.close()
+    assert "event: connected" in connected_chunk

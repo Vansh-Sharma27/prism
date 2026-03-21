@@ -16,8 +16,8 @@ def seeded_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_file = tmp_path / "seed_campus_test.db"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "seed-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "seed-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "seed-secret-key-1234567890-abcdef")
+    monkeypatch.setenv("JWT_SECRET_KEY", "seed-jwt-secret-key-1234567890-ab")
 
     app = create_app()
     app.config.update(TESTING=True)

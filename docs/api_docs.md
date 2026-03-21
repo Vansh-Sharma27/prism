@@ -386,6 +386,7 @@ Success response (`200`):
 
 Notes:
 
+- Supplying `distance_cm` refreshes `latest_distance_cm` / `last_reading_at` even when occupancy does not change.
 - If occupancy state changes, backend creates an event (`entry` or `exit`) and occupancy log row.
 
 Common errors:
@@ -823,3 +824,58 @@ TOKEN=$(curl -s -X POST http://localhost:5000/api/v1/auth/login \
 curl -s http://localhost:5000/api/v1/lots \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+---
+
+## ML Data Pipeline
+
+### Training Data Export
+
+Export PRISM sensor readings as zone-level time-bucketed training data:
+
+```bash
+cd backend
+python3 scripts/export_training_dataset.py \
+  --output ../data/processed/prism_training_export.csv \
+  --bucket-minutes 15
+```
+
+Options: `--lot-id`, `--start`, `--end`, `--bucket-minutes` (default 15)
+
+Output schema: `timestamp_iso`, `timestamp_unix`, `lot_id`, `zone_id`, `occupied_slots`, `total_slots`, `occupancy_pct`, `avg_distance_cm`, `coverage_pct`, `source_dataset`
+
+### Combine Datasets
+
+Merge PRISM export with external Kaggle (KLCC) dataset:
+
+```bash
+python3 scripts/combine_training_data.py \
+  --prism-input ../data/processed/prism_training_export.csv \
+  --kaggle-input ../data/raw/klcc.csv \
+  --output ../data/combined_training.csv
+```
+
+Supported external formats: KLCC (`datetime`, `location`, `capacity`, `available`)
+
+### Feature Engineering
+
+```python
+import pandas as pd
+from app.ml.feature_engineering import engineer_features, FEATURE_COLUMNS
+
+df = pd.read_csv("../data/combined_training.csv")
+features = engineer_features(df)
+# Output includes: hour_of_day, day_of_week, is_weekend, hour_sin/cos,
+# dow_sin/cos, lag_1, lag_2, rolling_mean_4, is_klcc_source
+```
+
+### ML Package Structure
+
+```
+backend/app/ml/
+├── __init__.py              # Package init
+├── training_data.py         # Canonical schema, normalization, merge
+└── feature_engineering.py   # Temporal, cyclical, lag/rolling features
+```
+
+Note: Prediction and recommendation endpoints remain mock skeletons. Real model integration is planned for Phase 3.

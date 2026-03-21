@@ -17,8 +17,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     db_file = tmp_path / "day8_endpoints.db"
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
-    monkeypatch.setenv("SECRET_KEY", "day8-secret")
-    monkeypatch.setenv("JWT_SECRET_KEY", "day8-jwt-secret")
+    monkeypatch.setenv("SECRET_KEY", "day8-secret-key-1234567890-abcdef")
+    monkeypatch.setenv("JWT_SECRET_KEY", "day8-jwt-secret-key-1234567890-abcd")
     monkeypatch.setenv("PRISM_ALLOW_PUBLIC_READS", "false")
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false")
 
@@ -44,6 +44,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             assert slot is not None
             slot.is_occupied = status == "occupied"
             slot.last_status_change = ts
+            slot.last_telemetry_at = ts
+            slot.last_distance_cm = distance
             db.session.add(
                 OccupancyLog(
                     slot_id=slot_id,

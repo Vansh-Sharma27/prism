@@ -48,6 +48,8 @@ class ParkingSlot(db.Model):
     slot_type = db.Column(db.String(20), default='standard')  # standard, handicapped, ev
     sensor_id = db.Column(db.String(50))
     last_status_change = db.Column(db.DateTime, default=datetime.utcnow)
+    last_telemetry_at = db.Column(db.DateTime)
+    last_distance_cm = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -56,6 +58,15 @@ class ParkingSlot(db.Model):
     
     def to_dict(self):
         latest_log = self.occupancy_logs.order_by(OccupancyLog.timestamp.desc()).first()
+        latest_distance = self.last_distance_cm
+        latest_seen = self.last_telemetry_at
+
+        if latest_log is not None:
+            if latest_distance is None:
+                latest_distance = latest_log.distance_cm
+            if latest_seen is None:
+                latest_seen = latest_log.timestamp
+
         return {
             'id': self.id,
             'lot_id': self.lot_id,
@@ -66,8 +77,8 @@ class ParkingSlot(db.Model):
             'is_reserved': self.is_reserved,
             'slot_type': self.slot_type,
             'sensor_id': self.sensor_id,
-            'latest_distance_cm': latest_log.distance_cm if latest_log else None,
-            'last_reading_at': latest_log.timestamp.isoformat() if latest_log else None,
+            'latest_distance_cm': latest_distance,
+            'last_reading_at': latest_seen.isoformat() if latest_seen else None,
             'last_status_change': self.last_status_change.isoformat() if self.last_status_change else None
         }
 

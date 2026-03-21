@@ -36,6 +36,55 @@ interface ApiAdminAnalyticsResponse {
   generated_at: string;
 }
 
+interface ApiLotPredictionZone {
+  zone_id: string;
+  name: string;
+  predicted_occupancy_pct: number;
+  trend: "filling" | "stable" | "clearing";
+  current_occupancy_pct: number;
+  total_slots: number;
+}
+
+interface ApiLotPredictionResponse {
+  lot_id: string;
+  lot_name: string;
+  predicted_for: {
+    day: string;
+    time: string;
+  };
+  zones: ApiLotPredictionZone[];
+  model: {
+    status: string;
+    version: string;
+    note: string;
+  };
+}
+
+interface ApiLotRecommendationZone {
+  zone_id: string;
+  name: string;
+  predicted_occupancy_pct: number;
+  trend: "filling" | "stable" | "clearing";
+  estimated_walk_minutes: number;
+  score: number;
+}
+
+interface ApiLotRecommendationResponse {
+  lot_id: string;
+  lot_name: string;
+  destination: string;
+  recommended_zone: ApiLotRecommendationZone | null;
+  alternatives: ApiLotRecommendationZone[];
+  predicted_for: {
+    day: string;
+    time: string;
+  };
+  engine: {
+    status: string;
+    note: string;
+  };
+}
+
 interface ApiAuthResponse {
   access_token: string;
   user: AuthUser;
@@ -179,6 +228,55 @@ export interface ActivityEvent {
   timestamp: number;
   slot: string;
   lot: string;
+}
+
+export interface PredictionZone {
+  zoneId: string;
+  name: string;
+  predictedOccupancyPct: number;
+  trend: "filling" | "stable" | "clearing";
+  currentOccupancyPct: number;
+  totalSlots: number;
+}
+
+export interface LotPredictionData {
+  lotId: string;
+  lotName: string;
+  predictedFor: {
+    day: string;
+    time: string;
+  };
+  zones: PredictionZone[];
+  model: {
+    status: string;
+    version: string;
+    note: string;
+  };
+}
+
+export interface RecommendationZone {
+  zoneId: string;
+  name: string;
+  predictedOccupancyPct: number;
+  trend: "filling" | "stable" | "clearing";
+  estimatedWalkMinutes: number;
+  score: number;
+}
+
+export interface LotRecommendationData {
+  lotId: string;
+  lotName: string;
+  destination: string;
+  recommendedZone: RecommendationZone | null;
+  alternatives: RecommendationZone[];
+  predictedFor: {
+    day: string;
+    time: string;
+  };
+  engine: {
+    status: string;
+    note: string;
+  };
 }
 
 export interface AdminSensorSlot {
@@ -593,6 +691,78 @@ export async function fetchActivityEvents(limit = 120): Promise<ActivityEvent[]>
     slot: formatSlotLabel(event),
     lot: event.lot_name || event.lot_id || "Unknown",
   }));
+}
+
+function mapPredictionZone(zone: ApiLotPredictionZone): PredictionZone {
+  return {
+    zoneId: zone.zone_id,
+    name: zone.name,
+    predictedOccupancyPct: zone.predicted_occupancy_pct,
+    trend: zone.trend,
+    currentOccupancyPct: zone.current_occupancy_pct,
+    totalSlots: zone.total_slots,
+  };
+}
+
+function mapRecommendationZone(zone: ApiLotRecommendationZone): RecommendationZone {
+  return {
+    zoneId: zone.zone_id,
+    name: zone.name,
+    predictedOccupancyPct: zone.predicted_occupancy_pct,
+    trend: zone.trend,
+    estimatedWalkMinutes: zone.estimated_walk_minutes,
+    score: zone.score,
+  };
+}
+
+export async function fetchLotPrediction(
+  lotId: string,
+  day: string,
+  time: string
+): Promise<LotPredictionData> {
+  const query = new URLSearchParams({
+    day,
+    time,
+  });
+  const response = await fetchJson<ApiLotPredictionResponse>(
+    `${API_BASE}/lots/${lotId}/predict?${query.toString()}`
+  );
+
+  return {
+    lotId: response.lot_id,
+    lotName: response.lot_name,
+    predictedFor: response.predicted_for,
+    zones: response.zones.map(mapPredictionZone),
+    model: response.model,
+  };
+}
+
+export async function fetchLotRecommendation(
+  lotId: string,
+  destination: string,
+  day: string,
+  time: string
+): Promise<LotRecommendationData> {
+  const query = new URLSearchParams({
+    destination,
+    day,
+    time,
+  });
+  const response = await fetchJson<ApiLotRecommendationResponse>(
+    `${API_BASE}/lots/${lotId}/recommend?${query.toString()}`
+  );
+
+  return {
+    lotId: response.lot_id,
+    lotName: response.lot_name,
+    destination: response.destination,
+    recommendedZone: response.recommended_zone
+      ? mapRecommendationZone(response.recommended_zone)
+      : null,
+    alternatives: response.alternatives.map(mapRecommendationZone),
+    predictedFor: response.predicted_for,
+    engine: response.engine,
+  };
 }
 
 function mapAdminSensorSlot(slot: ApiAdminSensorSlot): AdminSensorSlot {

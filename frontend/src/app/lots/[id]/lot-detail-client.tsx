@@ -7,6 +7,8 @@ import { SlotGrid } from "@/components/SlotGrid";
 import { SectionHeader, StatCell } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { PollingNotice } from "@/components/PollingNotice";
+import { LotInsightsPanel } from "@/components/LotInsightsPanel";
+import { AnalyticsCharts } from "@/components/AnalyticsCharts";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { fetchLotDetailData } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
@@ -93,6 +95,16 @@ export function LotDetailClient({ lotId }: LotDetailClientProps) {
               </div>
             )}
           </div>
+
+          <LotInsightsPanel lotId={lotId} lotName={lotName} />
+
+          <AnalyticsCharts
+            zoneUtilization={zones.map((zone) => ({
+              name: zone.name,
+              utilization: zone.total > 0 ? Math.round((zone.occupied / zone.total) * 100) : 0,
+              vacant: zone.total > 0 ? Math.round((zone.vacant / zone.total) * 100) : 0,
+            }))}
+          />
 
           <section className="mb-8" aria-label="Zone-level breakdown">
             <SectionHeader title="Zone Breakdown" count={zones.length} />

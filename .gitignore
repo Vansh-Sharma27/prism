@@ -41,6 +41,8 @@ env/
 !**/.env.example
 backend/instance/
 *.db
+*.sqlite
+*.sqlite3
 
 # Logs
 logs/
@@ -54,6 +56,8 @@ frontend/node_modules/
 # Build outputs
 frontend/.next/
 frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
 *.min.js
 *.min.css
 next-env.d.ts
@@ -68,6 +72,7 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+data/combined_training.csv
 
 # Coverage
 htmlcov/
@@ -78,6 +83,8 @@ coverage.xml
 
 # Testing
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .tox/
 .nox/
 
@@ -95,6 +102,4 @@ temp/
 docs/plans/
 
 # Day-wise local tracking reports (must never be pushed)
-docs/day*_closure_report.md
-docs/day*_full_stack_simulator_test.md
-docs/day*_auth_simulator_report.md
+docs/day*_*.md
