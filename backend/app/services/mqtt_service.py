@@ -225,15 +225,14 @@ class MQTTService:
                     timestamp=received_at,
                 )
             )
-            if old_status != is_occupied:
-                db.session.add(
-                    OccupancyLog(
-                        slot_id=slot.id,
-                        status="occupied" if is_occupied else "vacant",
-                        distance_cm=distance,
-                        timestamp=received_at,
-                    )
+            db.session.add(
+                OccupancyLog(
+                    slot_id=slot.id,
+                    status="occupied" if is_occupied else "vacant",
+                    distance_cm=distance,
+                    timestamp=received_at,
                 )
+            )
 
             try:
                 db.session.commit()

@@ -84,6 +84,7 @@ def _apply_slot_update(
             slot.is_occupied = incoming_status
             changed_occupancy = True
             event_at = datetime.utcnow()
+            slot.last_telemetry_at = event_at
             slot.last_status_change = event_at
             event_type = "entry" if slot.is_occupied else "exit"
 

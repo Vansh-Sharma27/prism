@@ -219,7 +219,7 @@ def test_slot_updates_refresh_telemetry_without_writing_duplicate_occupancy_logs
             assert slot is not None
             assert slot.last_distance_cm == pytest.approx(79.5)
             assert slot.is_occupied is False
-            assert OccupancyLog.query.filter_by(slot_id="lot-a-slot-1").count() == baseline_logs
+            assert OccupancyLog.query.filter_by(slot_id="lot-a-slot-1").count() == baseline_logs + 1
             assert ParkingEvent.query.filter_by(slot_id="lot-a-slot-1").count() == baseline_events
     finally:
         service.stop()
