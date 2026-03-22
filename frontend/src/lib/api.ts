@@ -393,20 +393,15 @@ async function parseApiErrorMessage(res: Response): Promise<string> {
 }
 
 function getBearerToken(): string | null {
-  if (typeof window !== "undefined") {
-    let clientToken: string | null = null;
-    try {
-      clientToken = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    } catch {
-      clientToken = null;
-    }
-    if (clientToken) {
-      return clientToken;
-    }
+  if (typeof window === "undefined") {
+    return null;
   }
 
-  const envToken = process.env.NEXT_PUBLIC_API_TOKEN;
-  return envToken || null;
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function notifySessionInvalid(status: number, url: string): void {
