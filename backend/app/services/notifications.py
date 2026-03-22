@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from queue import Empty, Full, Queue
 from threading import Lock
@@ -11,6 +12,9 @@ from uuid import uuid4
 
 import redis
 from flask import current_app
+
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationSubscription(Protocol):
@@ -93,7 +97,11 @@ class RedisSubscription:
         data = message.get("data")
         if not data:
             return None
-        return json.loads(data)
+        try:
+            return json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Malformed Redis pub/sub payload dropped: %s", data[:200] if isinstance(data, str) else type(data))
+            return None
 
     def close(self) -> None:
         self._pubsub.close()

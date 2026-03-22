@@ -61,8 +61,8 @@ def test_seed_campus_cli_creates_expected_baseline(seeded_app):
 
 def test_seed_campus_cli_is_idempotent(seeded_app):
     runner = seeded_app.test_cli_runner()
-    first = runner.invoke(args=["seed-campus"])
-    second = runner.invoke(args=["seed-campus"])
+    first = runner.invoke(args=["seed-campus", "--admin-password", "TestPass@123"])
+    second = runner.invoke(args=["seed-campus", "--admin-password", "TestPass@123"])
 
     assert first.exit_code == 0
     assert second.exit_code == 0

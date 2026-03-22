@@ -28,6 +28,8 @@ const char* WIFI_SSID = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 const char* MQTT_BROKER = "YOUR_MQTT_BROKER_IP";
 const int MQTT_PORT = 1883;
+const char* MQTT_USERNAME = "YOUR_MQTT_USERNAME";   // Set broker credentials
+const char* MQTT_PASSWORD = "YOUR_MQTT_PASSWORD";   // Set broker credentials
 const char* LOT_ID = "lot-a";
 const char* DEVICE_ID = "esp32-01";
 // =========================================
@@ -135,7 +137,7 @@ bool connectMQTT() {
   int attempts = 0;
   while (!mqtt.connected() && attempts < 6) {
     Serial.print("Connecting to MQTT...");
-    if (mqtt.connect(DEVICE_ID)) {
+    if (mqtt.connect(DEVICE_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
       Serial.println("connected!");
       return true;
     }

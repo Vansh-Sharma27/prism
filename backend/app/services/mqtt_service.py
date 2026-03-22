@@ -26,6 +26,11 @@ class MQTTService:
         self.port = int(os.getenv("MQTT_BROKER_PORT", 1883))
         self.occupancy_threshold = float(os.getenv("PRISM_OCCUPANCY_THRESHOLD_CM", 15))
 
+        mqtt_user = os.getenv("MQTT_USERNAME", "")
+        mqtt_pass = os.getenv("MQTT_PASSWORD", "")
+        if mqtt_user:
+            self.client.username_pw_set(mqtt_user, mqtt_pass)
+
         self.reconnect_min_delay = max(1, int(os.getenv("MQTT_RECONNECT_MIN_DELAY", 1)))
         self.reconnect_max_delay = max(
             self.reconnect_min_delay,
