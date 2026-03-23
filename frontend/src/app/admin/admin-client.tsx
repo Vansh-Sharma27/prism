@@ -49,10 +49,14 @@ function formatTimeMs(value: number): string {
 
 function csvEscape(value: string | number | null | undefined): string {
   const raw = value == null ? "" : String(value);
-  if (!raw.includes(",") && !raw.includes('"') && !raw.includes("\n")) {
-    return raw;
+  // Neutralize spreadsheet formula prefixes to prevent CSV injection
+  const needsFormulaGuard =
+    raw.length > 0 && (raw[0] === "=" || raw[0] === "+" || raw[0] === "-" || raw[0] === "@");
+  const escaped = needsFormulaGuard ? `'${raw}` : raw;
+  if (!escaped.includes(",") && !escaped.includes('"') && !escaped.includes("\n")) {
+    return escaped;
   }
-  return `"${raw.replace(/"/g, '""')}"`;
+  return `"${escaped.replace(/"/g, '""')}"`;
 }
 
 function buildAdminAnalyticsCsv(analytics: AdminAnalyticsData): string {

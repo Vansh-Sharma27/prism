@@ -213,12 +213,17 @@ def register_seed_command(app: Flask) -> None:
     )
     @click.option(
         "--admin-password",
-        default="Admin@12345",
+        envvar="PRISM_ADMIN_PASSWORD",
+        default=None,
         show_default=False,
-        help="Admin password used for the seeded admin account.",
+        help="Admin password (required). Set via --admin-password or PRISM_ADMIN_PASSWORD env var.",
     )
-    def seed_campus(admin_email: str, admin_password: str) -> None:
+    def seed_campus(admin_email: str, admin_password: str | None) -> None:
         """Seed lots, zones, slots, and admin user for PRISM campus."""
+        if not admin_password:
+            raise click.UsageError(
+                "Admin password is required. Provide --admin-password or set PRISM_ADMIN_PASSWORD."
+            )
         summary = seed_campus_data(admin_email=admin_email, admin_password=admin_password)
         click.echo("Campus seed completed:")
         for key, value in summary.items():

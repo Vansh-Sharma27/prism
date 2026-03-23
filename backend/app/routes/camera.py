@@ -26,7 +26,11 @@ CONTENT_TYPE_EXTENSIONS = {
 def _require_ingest_token():
     token = current_app.config.get("CAMERA_UPLOAD_TOKEN", "")
     if not token:
-        return None
+        return error_response(
+            "Camera ingest token not configured. Set PRISM_CAMERA_UPLOAD_TOKEN.",
+            503,
+            code="token_not_configured",
+        )
 
     supplied = request.headers.get("X-Camera-Token", "")
     if not secrets.compare_digest(supplied, token):

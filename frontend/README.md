@@ -135,14 +135,7 @@ The frontend now includes Day 6 auth pages:
 
 Successful login stores JWT in `localStorage["prism_access_token"]`. Protected pages (`/`, `/lots`, `/lots/[id]`, `/activity`, `/settings`, `/admin`) enforce client-side auth via `ProtectedRoute`.
 
-If backend read endpoints require auth and you want to bypass login UI in local testing, set either:
-
-```bash
-# Option 1: env token for all browser sessions
-NEXT_PUBLIC_API_TOKEN=<jwt_token>
-```
-
-Or in browser devtools:
+If backend read endpoints require auth and you want to bypass login UI in local testing, set a token in browser devtools:
 
 ```js
 localStorage.setItem("prism_access_token", "<jwt_token>")

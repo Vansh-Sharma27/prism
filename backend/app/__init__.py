@@ -26,10 +26,12 @@ jwt = JWTManager()
 
 
 def _rate_limit_key() -> str:
-    """Return rate-limiting identity based on requester IP."""
-    forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    """Return rate-limiting identity based on requester IP.
+
+    Uses request.remote_addr directly instead of trusting the
+    X-Forwarded-For header, which is user-controlled and spoofable
+    unless a trusted reverse proxy strips it.
+    """
     return get_remote_address() or "unknown"
 
 
