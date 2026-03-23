@@ -69,10 +69,14 @@ def client_with_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _trained_
 def client_without_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Flask test client with no ML model (fallback mode)."""
     db_file = tmp_path / "day15_fallback.db"
+    # Use a path within the project root so H1 containment check passes,
+    # but pointing to a non-existent file so PredictionService has no model.
+    project_root = Path(__file__).resolve().parents[1].parent
+    fake_model = project_root / "ml" / "models" / "nonexistent_test_model.pkl"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     monkeypatch.setenv("SECRET_KEY", "day15-secret-key-1234567890-abcdef")
     monkeypatch.setenv("JWT_SECRET_KEY", "day15-jwt-secret-key-1234567890-ab")
-    monkeypatch.setenv("ML_MODEL_PATH", str(tmp_path / "no_such_model.pkl"))
+    monkeypatch.setenv("ML_MODEL_PATH", str(fake_model))
 
     app = create_app()
     app.config.update(TESTING=True)
