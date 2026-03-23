@@ -144,7 +144,7 @@ def create_app(config_name=None):
     if ml_model_path is not None:
         # H1: Validate path is within project directory to prevent traversal
         resolved = Path(ml_model_path).resolve()
-        if not str(resolved).startswith(str(project_root)):
+        if not resolved.is_relative_to(project_root):
             app.logger.error(
                 "ML_MODEL_PATH %s resolves outside project root %s — ignoring",
                 ml_model_path,

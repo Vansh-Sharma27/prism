@@ -42,7 +42,16 @@ def _verify_model_integrity(model_path: Path) -> bool:
         logger.info("PredictionService: no .sha256 sidecar found, skipping integrity check")
         return True
 
-    expected_hash = hash_path.read_text().strip().split()[0].lower()
+    try:
+        raw = hash_path.read_text().strip()
+        if not raw:
+            logger.error("PredictionService: .sha256 sidecar is empty at %s", hash_path)
+            return False
+        expected_hash = raw.split()[0].lower()
+    except (IndexError, OSError) as exc:
+        logger.error("PredictionService: failed to read .sha256 sidecar at %s — %s", hash_path, exc)
+        return False
+
     actual_hash = _compute_file_sha256(model_path)
     if actual_hash != expected_hash:
         logger.error(
@@ -169,11 +178,11 @@ class PredictionService:
     ) -> str:
         """Compute occupancy trend based on current vs predicted.
 
-        Returns "filling", "emptying", or "stable".
+        Returns "filling", "clearing", or "stable".
         """
         diff = predicted_occupancy_pct - current_occupancy_pct
         if diff > threshold:
             return "filling"
         if diff < -threshold:
-            return "emptying"
+            return "clearing"
         return "stable"

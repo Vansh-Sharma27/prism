@@ -122,7 +122,7 @@ class TestPredictEndpointWithModel:
         data = resp.get_json()
         for zone in data["zones"]:
             assert "trend" in zone
-            assert zone["trend"] in ("filling", "emptying", "stable")
+            assert zone["trend"] in ("filling", "clearing", "stable")
 
     def test_predictions_have_valid_range(self, client_with_model):
         headers = _auth_headers(client_with_model, email="s3@gla.ac.in")

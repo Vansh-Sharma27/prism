@@ -145,12 +145,12 @@ class TestPredictionServiceTrend:
         trend = service.compute_trend(current_occupancy_pct=40.0, predicted_occupancy_pct=50.0)
         assert trend == "filling"
 
-    def test_trend_emptying(self):
+    def test_trend_clearing(self):
         from app.services.prediction_service import PredictionService
 
         service = PredictionService(model_path=None)
         trend = service.compute_trend(current_occupancy_pct=60.0, predicted_occupancy_pct=50.0)
-        assert trend == "emptying"
+        assert trend == "clearing"
 
     def test_trend_stable(self):
         from app.services.prediction_service import PredictionService
