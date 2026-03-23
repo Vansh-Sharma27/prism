@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import hashlib
 import joblib
 import numpy as np
 import pandas as pd
@@ -113,6 +114,14 @@ def train_occupancy_model(
     # Save model
     model_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)
+
+    # Save SHA-256 sidecar for integrity verification on load
+    sha256_hash = hashlib.sha256()
+    with open(model_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            sha256_hash.update(chunk)
+    hash_path = model_path.with_suffix(model_path.suffix + ".sha256")
+    hash_path.write_text(sha256_hash.hexdigest() + "\n")
 
     return {
         "r2": round(r2, 4),

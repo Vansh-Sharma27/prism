@@ -7,6 +7,7 @@ is available, allowing the endpoint to fall back to heuristics.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 from pathlib import Path
@@ -14,10 +15,45 @@ from typing import Any
 
 import joblib
 import numpy as np
+from sklearn.ensemble import RandomForestRegressor
 
 from app.ml.feature_engineering import FEATURE_COLUMNS
 
 logger = logging.getLogger(__name__)
+
+
+def _compute_file_sha256(path: Path) -> str:
+    """Return hex SHA-256 digest for a file, reading in 64 KiB chunks."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _verify_model_integrity(model_path: Path) -> bool:
+    """Verify model file SHA-256 against its sidecar .sha256 file.
+
+    Returns True if no sidecar exists (backwards compat) or if hash matches.
+    Returns False if sidecar exists but hash does not match.
+    """
+    hash_path = model_path.with_suffix(model_path.suffix + ".sha256")
+    if not hash_path.exists():
+        logger.info("PredictionService: no .sha256 sidecar found, skipping integrity check")
+        return True
+
+    expected_hash = hash_path.read_text().strip().split()[0].lower()
+    actual_hash = _compute_file_sha256(model_path)
+    if actual_hash != expected_hash:
+        logger.error(
+            "PredictionService: integrity check FAILED — expected %s, got %s",
+            expected_hash,
+            actual_hash,
+        )
+        return False
+
+    logger.info("PredictionService: SHA-256 integrity check passed")
+    return True
 
 
 class PredictionService:
@@ -38,8 +74,19 @@ class PredictionService:
             logger.warning("PredictionService: model file not found at %s", path)
             return
 
+        if not _verify_model_integrity(path):
+            logger.error("PredictionService: refusing to load model with failed integrity check")
+            return
+
         try:
-            self._model = joblib.load(path)
+            loaded = joblib.load(path)
+            if not isinstance(loaded, RandomForestRegressor):
+                logger.error(
+                    "PredictionService: loaded object is %s, expected RandomForestRegressor",
+                    type(loaded).__name__,
+                )
+                return
+            self._model = loaded
             logger.info("PredictionService: loaded model from %s", path)
         except Exception:
             logger.exception("PredictionService: failed to load model from %s", path)
@@ -73,6 +120,20 @@ class PredictionService:
             or None if no model is loaded.
         """
         if not self.is_available:
+            return None
+
+        # H2: Input range validation
+        if not (0 <= target_hour <= 23):
+            logger.warning("predict: target_hour %s out of range 0-23", target_hour)
+            return None
+        if not (0 <= target_day_of_week <= 6):
+            logger.warning("predict: target_day_of_week %s out of range 0-6", target_day_of_week)
+            return None
+        if not (0.0 <= current_occupancy_pct <= 100.0):
+            logger.warning("predict: current_occupancy_pct %s out of range 0-100", current_occupancy_pct)
+            return None
+        if previous_occupancy_pct is not None and not (0.0 <= previous_occupancy_pct <= 100.0):
+            logger.warning("predict: previous_occupancy_pct %s out of range 0-100", previous_occupancy_pct)
             return None
 
         prev_pct = previous_occupancy_pct if previous_occupancy_pct is not None else current_occupancy_pct
