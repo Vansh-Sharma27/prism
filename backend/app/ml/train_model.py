@@ -83,6 +83,12 @@ def train_occupancy_model(
         )
 
     # Prepare features and target
+    # Re-sort by global timestamp for proper temporal holdout split
+    # (engineer_features sorts by zone_id + time; we need time-only order)
+    df_features = df_features.sort_values(
+        by="timestamp_unix",
+        key=lambda col: pd.to_numeric(col, errors="coerce").fillna(0),
+    ).reset_index(drop=True)
     X = df_features[list(FEATURE_COLUMNS)].values.astype(np.float64)
     y = df_features["occupancy_pct"].values.astype(np.float64)
 
