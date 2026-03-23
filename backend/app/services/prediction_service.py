@@ -48,7 +48,7 @@ def _verify_model_integrity(model_path: Path) -> bool:
             logger.error("PredictionService: .sha256 sidecar is empty at %s", hash_path)
             return False
         expected_hash = raw.split()[0].lower()
-    except (IndexError, OSError) as exc:
+    except (IndexError, OSError, UnicodeDecodeError) as exc:
         logger.error("PredictionService: failed to read .sha256 sidecar at %s — %s", hash_path, exc)
         return False
 
@@ -165,7 +165,11 @@ class PredictionService:
             dtype=np.float64,
         ).reshape(1, -1)
 
-        raw_prediction = float(self._model.predict(features)[0])
+        try:
+            raw_prediction = float(self._model.predict(features)[0])
+        except Exception:
+            logger.exception("predict: model.predict() failed, returning None")
+            return None
         clamped = max(0.0, min(100.0, raw_prediction))
         return round(clamped, 1)
 
