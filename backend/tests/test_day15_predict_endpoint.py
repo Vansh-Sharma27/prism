@@ -16,18 +16,29 @@ from seed import seed_campus_data
 
 
 @pytest.fixture()
-def _trained_model(tmp_path: Path):
-    """Train a model and set the env var for the app to pick up."""
+def _trained_model():
+    """Train a model within the project tree so path containment passes in CI."""
+    import os
+
     from app.ml.train_model import train_occupancy_model
 
-    model_path = tmp_path / "test_model.pkl"
+    # Place model inside project root so H1 containment check accepts it
+    project_root = Path(__file__).resolve().parents[1].parent
+    models_dir = project_root / "ml" / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    model_path = models_dir / f"_test_model_{os.getpid()}.pkl"
+
     train_occupancy_model(
         training_csv_path=None,
         output_model_path=model_path,
         synthetic_rows=300,
         seed=42,
     )
-    return model_path
+    yield model_path
+    # Cleanup test artifacts
+    model_path.unlink(missing_ok=True)
+    hash_path = model_path.with_suffix(model_path.suffix + ".sha256")
+    hash_path.unlink(missing_ok=True)
 
 
 @pytest.fixture()
