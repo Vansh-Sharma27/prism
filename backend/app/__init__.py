@@ -117,8 +117,24 @@ def create_app(config_name=None):
     limiter.init_app(app)
 
     from app.services.notifications import configure_notification_broker
+    from app.services.prediction_service import PredictionService
 
     configure_notification_broker(app)
+
+    # Initialize ML prediction service (gracefully degrades if no model file)
+    ml_model_path = os.getenv("ML_MODEL_PATH", "").strip() or None
+    if ml_model_path is None:
+        from pathlib import Path
+
+        default_path = Path(__file__).resolve().parents[2] / "ml" / "models" / "occupancy_predictor.pkl"
+        ml_model_path = str(default_path) if default_path.exists() else None
+
+    prediction_service = PredictionService(model_path=ml_model_path)
+    app.extensions["prediction_service"] = prediction_service
+    if prediction_service.is_available:
+        app.logger.info("ML PredictionService loaded successfully")
+    else:
+        app.logger.info("ML PredictionService unavailable; endpoint will use heuristic fallback")
 
     allowed_origins = [
         origin.strip()
