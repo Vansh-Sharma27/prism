@@ -1,1 +1,1 @@
-"""PRISM ML preparation package for Day 13 data pipeline and Day 15 model training."""
+"""PRISM ML package: data pipeline (Day 13), synthetic data generation, and model training (Day 15)."""
