@@ -119,13 +119,24 @@ def validate_canonical_row(row: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _safe_timestamp_unix(row: dict[str, Any]) -> int:
+    """Extract timestamp_unix as int, defaulting to 0 for blank/non-numeric values."""
+    raw = row.get("timestamp_unix")
+    if not raw:
+        return 0
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return 0
+
+
 def merge_training_datasets(
     prism_rows: list[dict[str, Any]],
     external_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Merge PRISM-exported and external training rows, sorted by timestamp."""
     combined = list(prism_rows) + list(external_rows)
-    combined.sort(key=lambda r: int(r.get("timestamp_unix", 0)))
+    combined.sort(key=_safe_timestamp_unix)
     return combined
 
 
