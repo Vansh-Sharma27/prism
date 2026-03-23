@@ -202,7 +202,8 @@ def _heuristic_prediction_rows(
 
 
 def _format_sse(event_name: str, payload: dict[str, Any]) -> str:
-    return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n"
+    safe_event = event_name.replace("\n", "").replace("\r", "")
+    return f"event: {safe_event}\ndata: {json.dumps(payload, default=str)}\n\n"
 
 
 @insights_bp.route("/api/v1/lots/<lot_id>/predict", methods=["GET"])
