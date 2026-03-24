@@ -119,15 +119,22 @@ def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> tu
     service: PredictionService = current_app.extensions.get("prediction_service")
 
     if service is not None and service.is_available:
-        return _ml_prediction_rows(service, zone_rows, day, hour)
+        result = _ml_prediction_rows(service, zone_rows, day, hour)
+        if result is not None:
+            return result
 
     return _heuristic_prediction_rows(zone_rows, day, hour)
 
 
 def _ml_prediction_rows(
     service: Any, zone_rows: list[dict[str, Any]], day: str, hour: int,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Produce predictions using the trained ML model."""
+) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
+    """Produce predictions using the trained ML model.
+
+    Returns None if any zone prediction fails, signalling the caller to
+    fall back to heuristic mode so clients never receive silently degraded
+    predictions with misleading ``model.status = "active"`` metadata.
+    """
     day_index = DAY_NAME_TO_INDEX[day]
     predictions: list[dict[str, Any]] = []
 
@@ -139,7 +146,7 @@ def _ml_prediction_rows(
             current_occupancy_pct=current,
         )
         if predicted is None:
-            predicted = current
+            return None
         trend = service.compute_trend(
             current_occupancy_pct=current,
             predicted_occupancy_pct=predicted,
