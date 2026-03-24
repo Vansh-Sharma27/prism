@@ -64,6 +64,7 @@ next-env.d.ts
 
 # ML models
 ml/models/*.pkl
+ml/models/*.pkl.sha256
 ml/models/*.joblib
 !ml/models/.gitkeep
 

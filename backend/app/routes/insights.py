@@ -37,6 +37,15 @@ DAY_FACTOR = {
     "saturday": -3.0,
     "sunday": -4.0,
 }
+DAY_NAME_TO_INDEX = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+}
 
 
 def _time_factor(hour: int) -> float:
@@ -100,14 +109,100 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
     return lot, zone_rows
 
 
-def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> list[dict[str, Any]]:
+def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Generate predictions using ML model if available, otherwise heuristic fallback.
+
+    Returns (predictions_list, model_metadata_dict).
+    """
+    from app.services.prediction_service import PredictionService
+
+    service: PredictionService = current_app.extensions.get("prediction_service")
+
+    if service is not None and service.is_available:
+        result = _ml_prediction_rows(service, zone_rows, day, hour)
+        if result is not None:
+            return result
+
+    return _heuristic_prediction_rows(zone_rows, day, hour)
+
+
+def _zone_previous_occupancy_pct(zone_id: str) -> float | None:
+    """Query the average zone occupancy over the last hour from OccupancyLog.
+
+    Returns a float (0-100) or None when no recent history exists.
+    This provides a real ``previous_occupancy_pct`` for ML lag features,
+    avoiding train/serve skew where lag features collapse to current values.
+    """
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    result = (
+        db.session.query(
+            func.avg(case((OccupancyLog.status == "occupied", 100.0), else_=0.0)),
+        )
+        .join(ParkingSlot, OccupancyLog.slot_id == ParkingSlot.id)
+        .filter(ParkingSlot.zone_id == zone_id)
+        .filter(OccupancyLog.timestamp >= one_hour_ago)
+        .scalar()
+    )
+    return round(float(result), 1) if result is not None else None
+
+
+def _ml_prediction_rows(
+    service: Any, zone_rows: list[dict[str, Any]], day: str, hour: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
+    """Produce predictions using the trained ML model.
+
+    Returns None if any zone prediction fails, signalling the caller to
+    fall back to heuristic mode so clients never receive silently degraded
+    predictions with misleading ``model.status = "active"`` metadata.
+    """
+    day_index = DAY_NAME_TO_INDEX[day]
+    predictions: list[dict[str, Any]] = []
+
+    for zone in zone_rows:
+        current = zone["current_occupancy_pct"]
+        previous = _zone_previous_occupancy_pct(zone["zone_id"])
+        predicted = service.predict(
+            target_hour=hour,
+            target_day_of_week=day_index,
+            current_occupancy_pct=current,
+            previous_occupancy_pct=previous,
+        )
+        if predicted is None:
+            return None
+        trend = service.compute_trend(
+            current_occupancy_pct=current,
+            predicted_occupancy_pct=predicted,
+        )
+
+        predictions.append(
+            {
+                "zone_id": zone["zone_id"],
+                "name": zone["name"],
+                "predicted_occupancy_pct": predicted,
+                "trend": trend,
+                "current_occupancy_pct": current,
+                "total_slots": zone["total_slots"],
+            }
+        )
+
+    model_meta = {
+        "status": "active",
+        "version": "day15-rf-v1",
+        "type": "RandomForest",
+    }
+    return predictions, model_meta
+
+
+def _heuristic_prediction_rows(
+    zone_rows: list[dict[str, Any]], day: str, hour: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Fallback heuristic predictions when ML model is unavailable."""
     predictions: list[dict[str, Any]] = []
     day_adjustment = DAY_FACTOR[day]
     hour_adjustment = _time_factor(hour)
 
     for zone in zone_rows:
         current = zone["current_occupancy_pct"]
-        # Skeleton heuristic for Phase 2; real model integration is planned in Phase 3.
         predicted = max(0.0, min(100.0, round(current + day_adjustment + hour_adjustment, 1)))
         if predicted >= current + 5:
             trend = "filling"
@@ -127,11 +222,17 @@ def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> li
             }
         )
 
-    return predictions
+    model_meta = {
+        "status": "heuristic_fallback",
+        "version": "day8-skeleton-v1",
+        "note": "ML model not loaded; using rule-based heuristic.",
+    }
+    return predictions, model_meta
 
 
 def _format_sse(event_name: str, payload: dict[str, Any]) -> str:
-    return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n"
+    safe_event = event_name.replace("\n", "").replace("\r", "")
+    return f"event: {safe_event}\ndata: {json.dumps(payload, default=str)}\n\n"
 
 
 @insights_bp.route("/api/v1/lots/<lot_id>/predict", methods=["GET"])
@@ -152,18 +253,14 @@ def get_prediction(lot_id: str):
     if lot is None:
         return error_response("Lot not found", 404)
 
-    predictions = _prediction_rows(zone_rows, day=day, hour=hour)
+    predictions, model_meta = _prediction_rows(zone_rows, day=day, hour=hour)
     return jsonify(
         {
             "lot_id": lot.id,
             "lot_name": lot.name,
             "predicted_for": {"day": day, "time": time_label},
             "zones": predictions,
-            "model": {
-                "status": "mock",
-                "version": "day8-skeleton-v1",
-                "note": "ML model integration planned in Phase 3.",
-            },
+            "model": model_meta,
         }
     )
 
@@ -194,7 +291,7 @@ def get_recommendation(lot_id: str):
     if lot is None:
         return error_response("Lot not found", 404)
 
-    predictions = _prediction_rows(zone_rows, day=day, hour=hour)
+    predictions, _ = _prediction_rows(zone_rows, day=day, hour=hour)
 
     ranked = []
     destination_key = destination.lower()

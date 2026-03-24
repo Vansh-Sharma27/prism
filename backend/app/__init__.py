@@ -7,6 +7,7 @@ import os
 import secrets
 import time
 from datetime import timedelta
+from pathlib import Path
 from uuid import uuid4
 
 from flask import Flask, g, request
@@ -17,8 +18,11 @@ from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.responses import error_response
+
+logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -28,14 +32,39 @@ jwt = JWTManager()
 def _rate_limit_key() -> str:
     """Return rate-limiting identity based on requester IP.
 
-    Uses request.remote_addr directly instead of trusting the
-    X-Forwarded-For header, which is user-controlled and spoofable
-    unless a trusted reverse proxy strips it.
+    When ProxyFix is enabled (PRISM_TRUSTED_PROXY_HOPS >= 1), request.remote_addr
+    is already rewritten from X-Forwarded-For by the middleware, so each real
+    client gets its own limiter bucket even behind a reverse proxy.
+    When no trusted proxy is configured, this falls back to the raw remote_addr.
     """
     return get_remote_address() or "unknown"
 
 
 limiter = Limiter(key_func=_rate_limit_key, default_limits=[])
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read an environment variable as int, falling back to default on error."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid int for env var %s=%r, using default %s", name, raw, default)
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read an environment variable as float, falling back to default on error."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid float for env var %s=%r, using default %s", name, raw, default)
+        return default
 
 
 def _is_api_path(path: str) -> bool:
@@ -45,6 +74,19 @@ def _is_api_path(path: str) -> bool:
 def create_app(config_name=None):
     """Application factory pattern."""
     app = Flask(__name__)
+
+    # P1: Apply ProxyFix so request.remote_addr reflects the real client IP
+    # when behind a trusted reverse proxy (Nginx, Next.js rewrites, etc.).
+    # Set PRISM_TRUSTED_PROXY_HOPS=1 (or higher) when deployed behind a proxy.
+    trusted_hops = _env_int("PRISM_TRUSTED_PROXY_HOPS", 0)
+    if trusted_hops > 0:
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=trusted_hops,
+            x_proto=trusted_hops,
+            x_host=trusted_hops,
+            x_prefix=trusted_hops,
+        )
 
     # Load configuration
     secret_key = os.getenv("SECRET_KEY")
@@ -73,7 +115,7 @@ def create_app(config_name=None):
         app.config["REDIS_URL"],
     )
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
-        hours=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 24))
+        hours=_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24)
     )
     app.config["ALLOW_PUBLIC_READS"] = (
         os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
@@ -90,11 +132,11 @@ def create_app(config_name=None):
         "PRISM_RATE_LIMIT_CAMERA_UPLOAD",
         "120 per minute",
     )
-    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = int(
-        os.getenv("PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15)
+    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int(
+        "PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15
     )
-    app.config["CAMERA_UPLOAD_MAX_BYTES"] = int(
-        os.getenv("PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024)
+    app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int(
+        "PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024
     )
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
@@ -117,8 +159,34 @@ def create_app(config_name=None):
     limiter.init_app(app)
 
     from app.services.notifications import configure_notification_broker
+    from app.services.prediction_service import PredictionService
 
     configure_notification_broker(app)
+
+    # Initialize ML prediction service (gracefully degrades if no model file)
+    ml_model_path = os.getenv("ML_MODEL_PATH", "").strip() or None
+    project_root = Path(__file__).resolve().parents[2]
+
+    if ml_model_path is not None:
+        # H1: Validate path is within project directory to prevent traversal
+        resolved = Path(ml_model_path).resolve()
+        if not resolved.is_relative_to(project_root):
+            app.logger.error(
+                "ML_MODEL_PATH %s resolves outside project root %s — ignoring",
+                ml_model_path,
+                project_root,
+            )
+            ml_model_path = None
+    if ml_model_path is None:
+        default_path = project_root / "ml" / "models" / "occupancy_predictor.pkl"
+        ml_model_path = str(default_path) if default_path.exists() else None
+
+    prediction_service = PredictionService(model_path=ml_model_path)
+    app.extensions["prediction_service"] = prediction_service
+    if prediction_service.is_available:
+        app.logger.info("ML PredictionService loaded successfully")
+    else:
+        app.logger.info("ML PredictionService unavailable; endpoint will use heuristic fallback")
 
     allowed_origins = [
         origin.strip()

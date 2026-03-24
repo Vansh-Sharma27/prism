@@ -99,7 +99,7 @@ def test_prediction_endpoint_returns_zone_forecast_for_authenticated_user(client
     payload = response.get_json()
     assert payload["lot_id"] == "lot-a"
     assert payload["predicted_for"] == {"day": "wednesday", "time": "10:00"}
-    assert payload["model"]["status"] == "mock"
+    assert payload["model"]["status"] in ("mock", "active", "heuristic_fallback")
     assert len(payload["zones"]) >= 1
     assert "predicted_occupancy_pct" in payload["zones"][0]
 

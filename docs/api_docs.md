@@ -1,6 +1,6 @@
-# PRISM API Documentation (Phase 2)
+# PRISM API Documentation
 
-This document covers backend endpoints and hardening behavior available in Phase 2.
+This document covers backend endpoints, hardening behavior, and ML-backed prediction services available in PRISM.
 
 ## Base URL
 
@@ -516,29 +516,29 @@ The command is idempotent. Re-running updates existing records without creating 
 
 ---
 
-## Prediction & Recommendation Endpoints (Day 8 Skeleton)
-
-These endpoints are Day 8 skeletons. They are intentionally rule-based and marked as mock until Phase 3 ML integration.
+## Prediction & Recommendation Endpoints
 
 ### GET `/api/v1/lots/<lot_id>/predict`
 
 Return projected zone occupancy for a target day and time.
+
+When a trained ML model is loaded (`ml/models/occupancy_predictor.pkl`), the endpoint uses a RandomForest regressor with 11 engineered features. When no model file is present, it falls back to a rule-based heuristic.
 
 Query params:
 
 - `day` (default `wednesday`)
 - `time` (default `10:00`, format `HH:MM`)
 
-Success response (`200`):
+Success response with ML model (`200`):
 
 ```json
 {
   "lot_id": "lot-a",
   "lot_name": "Academic Block A",
   "model": {
-    "note": "ML model integration planned in Phase 3.",
-    "status": "mock",
-    "version": "day8-skeleton-v1"
+    "status": "active",
+    "version": "day15-rf-v1",
+    "type": "RandomForest"
   },
   "predicted_for": {
     "day": "thursday",
@@ -557,6 +557,43 @@ Success response (`200`):
 }
 ```
 
+Fallback response without ML model (`200`):
+
+```json
+{
+  "lot_id": "lot-a",
+  "lot_name": "Academic Block A",
+  "model": {
+    "status": "heuristic_fallback",
+    "version": "day8-skeleton-v1",
+    "note": "ML model not loaded; using rule-based heuristic."
+  },
+  "predicted_for": {
+    "day": "thursday",
+    "time": "16:30"
+  },
+  "zones": [
+    {
+      "current_occupancy_pct": 50.0,
+      "name": "East Wing",
+      "predicted_occupancy_pct": 55.0,
+      "total_slots": 3,
+      "trend": "stable",
+      "zone_id": "zone-a-east"
+    }
+  ]
+}
+```
+
+Model metadata fields:
+
+- `status`: `"active"` (ML model loaded) or `"heuristic_fallback"` (no model file).
+- `version`: `"day15-rf-v1"` when active, `"day8-skeleton-v1"` for fallback.
+- `type`: `"RandomForest"` (present only when active).
+- `note`: present only in heuristic fallback mode.
+
+Trend values: `"filling"`, `"clearing"`, or `"stable"` (based on +/-5% threshold).
+
 Common errors:
 
 - `400` invalid `day` or `time`
@@ -565,7 +602,7 @@ Common errors:
 
 ### GET `/api/v1/lots/<lot_id>/recommend`
 
-Return a mock recommendation for where to park in the selected lot.
+Return a zone recommendation for where to park in the selected lot. Predictions feeding into the recommendation use the ML model when available (same as `/predict`). The recommendation scoring engine itself is rule-based (occupancy + walk-time weighting).
 
 Query params:
 
@@ -875,7 +912,36 @@ features = engineer_features(df)
 backend/app/ml/
 ├── __init__.py              # Package init
 ├── training_data.py         # Canonical schema, normalization, merge
-└── feature_engineering.py   # Temporal, cyclical, lag/rolling features
+├── feature_engineering.py   # Temporal, cyclical, lag/rolling features
+├── synthetic_data.py        # Synthetic occupancy data generation
+└── train_model.py           # Model training pipeline (RandomForest)
 ```
 
-Note: Prediction and recommendation endpoints remain mock skeletons. Real model integration is planned for Phase 3.
+### Model Artifacts
+
+- Model file: `ml/models/occupancy_predictor.pkl` (gitignored)
+- Integrity sidecar: `ml/models/occupancy_predictor.pkl.sha256`
+- Model type: `RandomForestRegressor(n_estimators=100, max_depth=15)`
+- Training performance: R²=0.8887, MAE=4.69%
+
+### PredictionService
+
+The `PredictionService` (`backend/app/services/prediction_service.py`) loads at app startup and is stored in `app.extensions["prediction_service"]`.
+
+- Loads model from `ML_MODEL_PATH` config (with path containment validation)
+- SHA-256 integrity verification against `.sha256` sidecar file
+- Input range validation on all prediction inputs
+- Graceful fallback: returns `None` when no model is available, allowing heuristic mode
+- Trend computation: `"filling"` (>+5%), `"clearing"` (<-5%), `"stable"` (within 5%)
+
+### Engineered Features (11 total)
+
+`hour_of_day`, `day_of_week`, `is_weekend`, `hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`, `occupancy_pct_lag_1`, `occupancy_pct_lag_2`, `occupancy_pct_rolling_mean_4`, `is_klcc_source`
+
+### Security Hardening (Day 15)
+
+- **ProxyFix middleware**: `PRISM_TRUSTED_PROXY_HOPS` controls reverse proxy trust depth
+- **ML model path containment**: `ML_MODEL_PATH` is validated to prevent path traversal
+- **SHA-256 model integrity**: model load is refused if sidecar hash does not match
+- **SSE event name sanitization**: newline/carriage-return characters stripped from event names
+- **Input range validation**: `predict()` rejects out-of-range hour, day, or occupancy values
