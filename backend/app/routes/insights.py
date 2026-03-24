@@ -126,6 +126,26 @@ def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> tu
     return _heuristic_prediction_rows(zone_rows, day, hour)
 
 
+def _zone_previous_occupancy_pct(zone_id: str) -> float | None:
+    """Query the average zone occupancy over the last hour from OccupancyLog.
+
+    Returns a float (0-100) or None when no recent history exists.
+    This provides a real ``previous_occupancy_pct`` for ML lag features,
+    avoiding train/serve skew where lag features collapse to current values.
+    """
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    result = (
+        db.session.query(
+            func.avg(case((OccupancyLog.status == "occupied", 100.0), else_=0.0)),
+        )
+        .join(ParkingSlot, OccupancyLog.slot_id == ParkingSlot.id)
+        .filter(ParkingSlot.zone_id == zone_id)
+        .filter(OccupancyLog.timestamp >= one_hour_ago)
+        .scalar()
+    )
+    return round(float(result), 1) if result is not None else None
+
+
 def _ml_prediction_rows(
     service: Any, zone_rows: list[dict[str, Any]], day: str, hour: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
@@ -140,10 +160,12 @@ def _ml_prediction_rows(
 
     for zone in zone_rows:
         current = zone["current_occupancy_pct"]
+        previous = _zone_previous_occupancy_pct(zone["zone_id"])
         predicted = service.predict(
             target_hour=hour,
             target_day_of_week=day_index,
             current_occupancy_pct=current,
+            previous_occupancy_pct=previous,
         )
         if predicted is None:
             return None
