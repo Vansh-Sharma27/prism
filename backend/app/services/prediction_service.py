@@ -52,7 +52,12 @@ def _verify_model_integrity(model_path: Path) -> bool:
         logger.error("PredictionService: failed to read .sha256 sidecar at %s — %s", hash_path, exc)
         return False
 
-    actual_hash = _compute_file_sha256(model_path)
+    try:
+        actual_hash = _compute_file_sha256(model_path)
+    except OSError as exc:
+        logger.error("PredictionService: failed to read model file for hashing at %s — %s", model_path, exc)
+        return False
+
     if actual_hash != expected_hash:
         logger.error(
             "PredictionService: integrity check FAILED — expected %s, got %s",
