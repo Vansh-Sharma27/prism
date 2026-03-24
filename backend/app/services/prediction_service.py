@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -34,13 +35,21 @@ def _compute_file_sha256(path: Path) -> str:
 def _verify_model_integrity(model_path: Path) -> bool:
     """Verify model file SHA-256 against its sidecar .sha256 file.
 
-    Returns True if no sidecar exists (backwards compat) or if hash matches.
-    Returns False if sidecar exists but hash does not match.
+    Fail-closed: returns False when the sidecar is missing, empty, or
+    unreadable, ensuring unverified pickles are never deserialized.
+    Set env ``ML_SKIP_INTEGRITY_CHECK=true`` only for local development.
     """
+    if os.getenv("ML_SKIP_INTEGRITY_CHECK", "false").lower() == "true":
+        logger.warning("PredictionService: ML_SKIP_INTEGRITY_CHECK is set — bypassing integrity check")
+        return True
+
     hash_path = model_path.with_suffix(model_path.suffix + ".sha256")
     if not hash_path.exists():
-        logger.info("PredictionService: no .sha256 sidecar found, skipping integrity check")
-        return True
+        logger.error(
+            "PredictionService: .sha256 sidecar not found at %s — refusing to load unverified model",
+            hash_path,
+        )
+        return False
 
     try:
         raw = hash_path.read_text().strip()
