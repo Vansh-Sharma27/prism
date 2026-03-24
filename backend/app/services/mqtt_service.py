@@ -15,6 +15,38 @@ logger = logging.getLogger(__name__)
 MQTT_TOPIC_PATTERN = "prism/+/slot/+"  # prism/{lot_id}/slot/{slot_id}
 HEARTBEAT_TOPIC_PATTERN = "prism/+/heartbeat"
 
+_MAX_LOG_PAYLOAD_LEN = 500
+
+
+def _safe_int(raw: str | None, default: int) -> int:
+    """Parse string as int, falling back to default on error."""
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid int value %r, using default %s", raw, default)
+        return default
+
+
+def _safe_float(raw: str | None, default: float) -> float:
+    """Parse string as float, falling back to default on error."""
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid float value %r, using default %s", raw, default)
+        return default
+
+
+def _truncate_payload(payload: Any) -> str:
+    """Truncate payload representation for safe logging."""
+    text = str(payload)
+    if len(text) > _MAX_LOG_PAYLOAD_LEN:
+        return text[:_MAX_LOG_PAYLOAD_LEN] + "...[truncated]"
+    return text
+
 
 class MQTTService:
     """Handles MQTT connection lifecycle and sensor message processing."""
@@ -23,18 +55,18 @@ class MQTTService:
         self.app = app
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.broker = os.getenv("MQTT_BROKER_HOST", "localhost")
-        self.port = int(os.getenv("MQTT_BROKER_PORT", 1883))
-        self.occupancy_threshold = float(os.getenv("PRISM_OCCUPANCY_THRESHOLD_CM", 15))
+        self.port = _safe_int(os.getenv("MQTT_BROKER_PORT"), 1883)
+        self.occupancy_threshold = _safe_float(os.getenv("PRISM_OCCUPANCY_THRESHOLD_CM"), 15.0)
 
         mqtt_user = os.getenv("MQTT_USERNAME", "")
         mqtt_pass = os.getenv("MQTT_PASSWORD", "")
         if mqtt_user:
             self.client.username_pw_set(mqtt_user, mqtt_pass)
 
-        self.reconnect_min_delay = max(1, int(os.getenv("MQTT_RECONNECT_MIN_DELAY", 1)))
+        self.reconnect_min_delay = max(1, _safe_int(os.getenv("MQTT_RECONNECT_MIN_DELAY"), 1))
         self.reconnect_max_delay = max(
             self.reconnect_min_delay,
-            int(os.getenv("MQTT_RECONNECT_MAX_DELAY", 30)),
+            _safe_int(os.getenv("MQTT_RECONNECT_MAX_DELAY"), 30),
         )
         self._reconnect_attempt = 0
 
@@ -153,7 +185,7 @@ class MQTTService:
                 "MQTT slot update ignored: missing or invalid distance_cm | lot_id=%s slot_topic_id=%s payload=%s",
                 lot_id,
                 slot_topic_id,
-                payload,
+                _truncate_payload(payload),
             )
             return
 
@@ -163,7 +195,7 @@ class MQTTService:
                 "MQTT slot update ignored: could not derive occupancy | lot_id=%s slot_topic_id=%s payload=%s",
                 lot_id,
                 slot_topic_id,
-                payload,
+                _truncate_payload(payload),
             )
             return
 

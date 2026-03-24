@@ -22,6 +22,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.responses import error_response
 
+logger = logging.getLogger(__name__)
+
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
@@ -41,6 +43,30 @@ def _rate_limit_key() -> str:
 limiter = Limiter(key_func=_rate_limit_key, default_limits=[])
 
 
+def _env_int(name: str, default: int) -> int:
+    """Read an environment variable as int, falling back to default on error."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid int for env var %s=%r, using default %s", name, raw, default)
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read an environment variable as float, falling back to default on error."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        logger.warning("Invalid float for env var %s=%r, using default %s", name, raw, default)
+        return default
+
+
 def _is_api_path(path: str) -> bool:
     return path.startswith("/api/")
 
@@ -52,7 +78,7 @@ def create_app(config_name=None):
     # P1: Apply ProxyFix so request.remote_addr reflects the real client IP
     # when behind a trusted reverse proxy (Nginx, Next.js rewrites, etc.).
     # Set PRISM_TRUSTED_PROXY_HOPS=1 (or higher) when deployed behind a proxy.
-    trusted_hops = int(os.getenv("PRISM_TRUSTED_PROXY_HOPS", "0"))
+    trusted_hops = _env_int("PRISM_TRUSTED_PROXY_HOPS", 0)
     if trusted_hops > 0:
         app.wsgi_app = ProxyFix(
             app.wsgi_app,
@@ -89,7 +115,7 @@ def create_app(config_name=None):
         app.config["REDIS_URL"],
     )
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
-        hours=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 24))
+        hours=_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24)
     )
     app.config["ALLOW_PUBLIC_READS"] = (
         os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
@@ -106,11 +132,11 @@ def create_app(config_name=None):
         "PRISM_RATE_LIMIT_CAMERA_UPLOAD",
         "120 per minute",
     )
-    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = int(
-        os.getenv("PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15)
+    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int(
+        "PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15
     )
-    app.config["CAMERA_UPLOAD_MAX_BYTES"] = int(
-        os.getenv("PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024)
+    app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int(
+        "PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024
     )
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
