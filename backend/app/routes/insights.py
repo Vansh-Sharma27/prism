@@ -269,15 +269,15 @@ def get_prediction(lot_id: str):
 @jwt_required()
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_recommendation(lot_id: str):
-    """Return a mock zone recommendation for a destination."""
-    _, auth_error = get_current_user_from_jwt()
+    """Return ML-ranked zone recommendation with anti-herding."""
+    user, auth_error = get_current_user_from_jwt()
     if auth_error:
         return auth_error
 
     destination = request.args.get("destination", "").strip()
-    if not destination:
+    if not destination or len(destination) > 100:
         return error_response(
-            "destination query parameter is required",
+            "destination query parameter is required (max 100 characters)",
             400,
             code="validation_error",
         )
@@ -291,34 +291,36 @@ def get_recommendation(lot_id: str):
     if lot is None:
         return error_response("Lot not found", 404)
 
-    predictions, _ = _prediction_rows(zone_rows, day=day, hour=hour)
+    predictions, model_meta = _prediction_rows(zone_rows, day=day, hour=hour)
 
-    ranked = []
-    destination_key = destination.lower()
-    for zone, prediction in zip(zone_rows, predictions):
-        walk_times = zone.get("walk_times", {})
-        walk_min = None
-        for key, value in walk_times.items():
-            if key.lower() == destination_key:
-                walk_min = value
-                break
-        if walk_min is None:
-            walk_min = 8
+    from app.services.allocation_service import AllocationService
 
-        score = round(prediction["predicted_occupancy_pct"] + (walk_min * 3), 2)
-        ranked.append(
-            {
-                "zone_id": prediction["zone_id"],
-                "name": prediction["name"],
-                "predicted_occupancy_pct": prediction["predicted_occupancy_pct"],
-                "trend": prediction["trend"],
-                "estimated_walk_minutes": walk_min,
-                "score": score,
-            }
-        )
+    allocation = AllocationService()
+    scored_zones = allocation.recommend(
+        lot_id=lot_id,
+        destination=destination,
+        zone_rows=zone_rows,
+        predictions=predictions,
+        user_id=user.id if user else None,
+    )
 
-    ranked.sort(key=lambda item: (item["score"], item["predicted_occupancy_pct"]))
-    recommendation = ranked[0] if ranked else None
+    def _zone_to_dict(z):
+        return {
+            "zone_id": z.zone_id,
+            "name": z.zone_name,
+            "predicted_occupancy_pct": z.predicted_occupancy_pct,
+            "trend": z.trend,
+            "estimated_walk_minutes": z.walk_minutes,
+            "availability_pct": z.availability_pct,
+            "vacant_slots": z.vacant_slots,
+            "total_slots": z.total_slots,
+            "score": z.final_score,
+            "herding_penalty": z.herding_penalty,
+            "reason": z.reason,
+        }
+
+    recommendation = _zone_to_dict(scored_zones[0]) if scored_zones else None
+    alternatives = [_zone_to_dict(z) for z in scored_zones[1:3]]
 
     return jsonify(
         {
@@ -326,12 +328,19 @@ def get_recommendation(lot_id: str):
             "lot_name": lot.name,
             "destination": destination,
             "recommended_zone": recommendation,
-            "alternatives": ranked[1:3],
+            "alternatives": alternatives,
             "predicted_for": {"day": day, "time": time_label},
             "engine": {
-                "status": "mock",
-                "note": "Rule-based recommendation for Day 8. ML ranking is planned for Phase 3.",
+                "status": "active",
+                "version": "allocation-v1",
+                "weights": {
+                    "availability": 0.40,
+                    "walk_distance": 0.35,
+                    "prediction": 0.25,
+                },
+                "anti_herding": True,
             },
+            "model": model_meta,
         }
     )
 
@@ -526,9 +535,10 @@ def stream_notifications():
 
     lot_filter = request.args.get("lot_id", "").strip() or None
     heartbeat_interval = max(5, int(current_app.config.get("SSE_HEARTBEAT_INTERVAL_SECONDS", 15)))
+    max_duration_seconds = max(60, int(current_app.config.get("SSE_MAX_DURATION_SECONDS", 1800)))
 
     subscription = get_notification_broker().subscribe()
-    connected_at = datetime.utcnow().isoformat()
+    connected_at = datetime.utcnow()
 
     def generate_events():
         try:
@@ -536,11 +546,25 @@ def stream_notifications():
                 "connected",
                 {
                     "type": "connected",
-                    "connected_at": connected_at,
+                    "connected_at": connected_at.isoformat(),
                     "user_id": user.id,
+                    "max_duration_seconds": max_duration_seconds,
                 },
             )
             while True:
+                # P2 fix: enforce max-duration cap to prevent indefinite connections
+                elapsed = (datetime.utcnow() - connected_at).total_seconds()
+                if elapsed >= max_duration_seconds:
+                    yield _format_sse(
+                        "reconnect",
+                        {
+                            "type": "reconnect",
+                            "reason": "max_duration_exceeded",
+                            "elapsed_seconds": int(elapsed),
+                        },
+                    )
+                    break
+
                 event = subscription.get(timeout=heartbeat_interval)
                 if event is None:
                     yield _format_sse("ping", {"type": "ping", "timestamp": datetime.utcnow().isoformat()})

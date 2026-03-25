@@ -155,3 +155,21 @@ class OccupancyLog(db.Model):
     __table_args__ = (
         db.Index('idx_occupancy_logs_slot_time', 'slot_id', 'timestamp'),
     )
+
+
+class Recommendation(db.Model):
+    """Tracks zone recommendations for anti-herding analytics."""
+    __tablename__ = 'recommendations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    lot_id = db.Column(db.String(50), db.ForeignKey('parking_lots.id'), nullable=False)
+    zone_id = db.Column(db.String(50), db.ForeignKey('zones.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    destination = db.Column(db.String(100), nullable=False)
+    score = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index('idx_recommendations_zone_created', 'zone_id', 'created_at'),
+        db.Index('idx_recommendations_lot_created', 'lot_id', 'created_at'),
+    )

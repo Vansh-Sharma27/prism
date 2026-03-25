@@ -135,9 +135,13 @@ def create_app(config_name=None):
     app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int(
         "PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15
     )
+    app.config["SSE_MAX_DURATION_SECONDS"] = _env_int(
+        "PRISM_SSE_MAX_DURATION_SECONDS", 1800
+    )
     app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int(
         "PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024
     )
+    app.config["MAX_CONTENT_LENGTH"] = app.config["CAMERA_UPLOAD_MAX_BYTES"]
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
     app.config["CAMERA_UPLOAD_TOKEN"] = os.getenv("PRISM_CAMERA_UPLOAD_TOKEN", "")

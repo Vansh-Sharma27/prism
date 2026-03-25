@@ -120,16 +120,33 @@ def upload_camera_image():
         )
         return error_response("Failed to persist camera image", 500)
 
+    # Optional classification
+    classification_data = None
+    classify_param = request.args.get("classify", "").strip().lower()
+    if classify_param in ("true", "1", "yes"):
+        from app.services.camera_classification_service import CameraClassificationService
+
+        classifier = CameraClassificationService()
+        result = classifier.classify(payload)
+        classification_data = {
+            "presence": result.presence.value,
+            "confidence": result.confidence,
+            "method": result.method,
+            "metadata": dict(result.metadata),
+        }
+
+    response_data = {
+        "status": "received",
+        "camera_id": camera_id,
+        "filename": filename,
+        "bytes_received": len(payload),
+        "content_type": content_type,
+        "uploaded_at": datetime.utcnow().isoformat(),
+    }
+    if classification_data is not None:
+        response_data["classification"] = classification_data
+
     return (
-        jsonify(
-            {
-                "status": "received",
-                "camera_id": camera_id,
-                "filename": filename,
-                "bytes_received": len(payload),
-                "content_type": content_type,
-                "uploaded_at": datetime.utcnow().isoformat(),
-            }
-        ),
+        jsonify(response_data),
         201,
     )
