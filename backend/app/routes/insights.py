@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -90,19 +89,38 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
     if lot is None:
         return None, []
 
+    # Single aggregated query replaces 2N individual COUNT queries
+    rows = (
+        db.session.query(
+            Zone.id,
+            Zone.name,
+            Zone.walk_times,
+            func.count(ParkingSlot.id).label("total_slots"),
+            func.coalesce(
+                func.sum(case((ParkingSlot.is_occupied == True, 1), else_=0)),  # noqa: E712
+                0,
+            ).label("occupied_slots"),
+        )
+        .outerjoin(ParkingSlot, ParkingSlot.zone_id == Zone.id)
+        .filter(Zone.lot_id == lot_id)
+        .group_by(Zone.id, Zone.name, Zone.walk_times)
+        .order_by(Zone.name.asc())
+        .all()
+    )
+
     zone_rows: list[dict[str, Any]] = []
-    for zone in lot.zones.order_by(Zone.name.asc()).all():
-        total_slots = zone.slots.count()
-        occupied_slots = zone.slots.filter_by(is_occupied=True).count()
-        current_pct = round((occupied_slots / total_slots) * 100, 1) if total_slots else 0.0
+    for zone_id, name, walk_times, total_slots, occupied_slots in rows:
+        total = int(total_slots)
+        occupied = int(occupied_slots)
+        current_pct = round((occupied / total) * 100, 1) if total else 0.0
         zone_rows.append(
             {
-                "zone_id": zone.id,
-                "name": zone.name,
-                "total_slots": total_slots,
-                "occupied_slots": occupied_slots,
+                "zone_id": zone_id,
+                "name": name,
+                "total_slots": total,
+                "occupied_slots": occupied,
                 "current_occupancy_pct": current_pct,
-                "walk_times": zone.walk_times or {},
+                "walk_times": walk_times or {},
             }
         )
 
@@ -239,7 +257,7 @@ def _format_sse(event_name: str, payload: dict[str, Any]) -> str:
 @jwt_required()
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_prediction(lot_id: str):
-    """Return a mock prediction payload for a lot."""
+    """Return ML-backed or heuristic prediction payload for a lot."""
     _, auth_error = get_current_user_from_jwt()
     if auth_error:
         return auth_error
@@ -476,15 +494,22 @@ def get_admin_analytics():
         for row in daily_rows
     ]
 
-    events = ParkingEvent.query.filter(ParkingEvent.timestamp >= window_start).all()
-    hourly_counter: Counter[int] = Counter()
-    for event in events:
-        if event.timestamp:
-            hourly_counter[event.timestamp.hour] += 1
+    # Hourly event distribution via SQL aggregate (avoids loading all rows into memory)
+    hourly_rows = (
+        db.session.query(
+            func.extract("hour", ParkingEvent.timestamp).label("hour"),
+            func.count(ParkingEvent.id).label("cnt"),
+        )
+        .filter(ParkingEvent.timestamp >= window_start)
+        .filter(ParkingEvent.timestamp.isnot(None))
+        .group_by(func.extract("hour", ParkingEvent.timestamp))
+        .all()
+    )
+    hourly_counter: dict[int, int] = {int(row.hour): int(row.cnt) for row in hourly_rows}
 
     hourly_distribution = [{"hour": hour, "events": hourly_counter.get(hour, 0)} for hour in range(24)]
 
-    if events:
+    if hourly_counter:
         peak_hour = max(range(24), key=lambda hour: hourly_counter.get(hour, 0))
         peak_hour_summary = {
             "hour_utc": f"{peak_hour:02d}:00",
@@ -493,19 +518,39 @@ def get_admin_analytics():
     else:
         peak_hour_summary = {"hour_utc": None, "events": 0}
 
+    # Zone utilization: single aggregated query (replaces 2N COUNT queries + lazy lot load)
+    zone_util_rows = (
+        db.session.query(
+            Zone.id,
+            Zone.name,
+            Zone.lot_id,
+            ParkingLot.name.label("lot_name"),
+            func.count(ParkingSlot.id).label("total_slots"),
+            func.coalesce(
+                func.sum(case((ParkingSlot.is_occupied == True, 1), else_=0)),  # noqa: E712
+                0,
+            ).label("occupied_slots"),
+        )
+        .join(ParkingLot, ParkingLot.id == Zone.lot_id)
+        .outerjoin(ParkingSlot, ParkingSlot.zone_id == Zone.id)
+        .group_by(Zone.id, Zone.name, Zone.lot_id, ParkingLot.name)
+        .order_by(Zone.name.asc())
+        .all()
+    )
+
     zone_rows = []
-    for zone in Zone.query.order_by(Zone.name.asc()).all():
-        total_slots = zone.slots.count()
-        occupied_slots = zone.slots.filter_by(is_occupied=True).count()
+    for zone_id, zone_name, lot_id, lot_name, total_slots, occupied_slots in zone_util_rows:
+        total = int(total_slots)
+        occupied = int(occupied_slots)
         zone_rows.append(
             {
-                "zone_id": zone.id,
-                "zone_name": zone.name,
-                "lot_id": zone.lot_id,
-                "lot_name": zone.lot.name if zone.lot else None,
-                "occupied_slots": occupied_slots,
-                "total_slots": total_slots,
-                "utilization_pct": round((occupied_slots / total_slots) * 100, 1) if total_slots else 0.0,
+                "zone_id": zone_id,
+                "zone_name": zone_name,
+                "lot_id": lot_id,
+                "lot_name": lot_name,
+                "occupied_slots": occupied,
+                "total_slots": total,
+                "utilization_pct": round((occupied / total) * 100, 1) if total else 0.0,
             }
         )
 

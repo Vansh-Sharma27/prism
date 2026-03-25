@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 from datetime import datetime
@@ -67,6 +68,14 @@ class MQTTService:
         mqtt_pass = os.getenv("MQTT_PASSWORD", "")
         if mqtt_user:
             self.client.username_pw_set(mqtt_user, mqtt_pass)
+
+        # M7 fix: enable TLS when explicitly configured or on the standard TLS port
+        mqtt_tls = os.getenv("MQTT_TLS_ENABLED", "").lower()
+        if mqtt_tls == "true" or (mqtt_tls == "" and self.port == 8883):
+            import ssl
+            ca_certs = os.getenv("MQTT_TLS_CA_CERTS") or None
+            self.client.tls_set(ca_certs=ca_certs, tls_version=ssl.PROTOCOL_TLS_CLIENT)
+            logger.info("MQTT TLS enabled | ca_certs=%s", ca_certs or "system-default")
 
         self.reconnect_min_delay = max(1, _safe_int(os.getenv("MQTT_RECONNECT_MIN_DELAY"), 1))
         self.reconnect_max_delay = max(
@@ -167,7 +176,7 @@ class MQTTService:
                 self._handle_slot_update(lot_id, slot_topic_id, payload)
                 return
 
-            logger.warning("MQTT topic pattern mismatch | topic=%s", msg.topic)
+            logger.warning("MQTT topic pattern mismatch | topic=%s", _truncate_payload(msg.topic))
         except Exception:
             logger.exception("MQTT message processing failed | topic=%s", msg.topic)
 
@@ -181,9 +190,13 @@ class MQTTService:
             return None
 
         try:
-            return float(raw_distance)
+            value = float(raw_distance)
         except (TypeError, ValueError):
             return None
+
+        if not math.isfinite(value):
+            return None
+        return value
 
     def _parse_occupied(self, payload: dict[str, Any], distance: float | None) -> bool | None:
         if "occupied" in payload and isinstance(payload["occupied"], bool):
@@ -342,9 +355,8 @@ class MQTTService:
 
                 distance = self._parse_distance(snapshot.get("distance_cm"))
                 is_occupied = self._parse_occupied(snapshot, distance)
-                slot_id = self._resolve_slot_db_id(lot_id, slot_topic_id.strip())
 
-                # P3 fix: validate heartbeat slot_id against same pattern as topic IDs
+                # Validate before any use of the input
                 if not _TOPIC_ID_PATTERN.fullmatch(slot_topic_id.strip()):
                     logger.warning(
                         "MQTT heartbeat slot_id validation failed | lot_id=%s slot_id=%s",
@@ -352,6 +364,8 @@ class MQTTService:
                         slot_topic_id[:64],
                     )
                     continue
+
+                slot_id = self._resolve_slot_db_id(lot_id, slot_topic_id.strip())
 
                 # P2 fix: savepoint per slot so one bad slot doesn't roll back
                 # all valid updates in the heartbeat batch.

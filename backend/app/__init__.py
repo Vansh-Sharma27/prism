@@ -141,7 +141,11 @@ def create_app(config_name=None):
     app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int(
         "PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024
     )
-    app.config["MAX_CONTENT_LENGTH"] = app.config["CAMERA_UPLOAD_MAX_BYTES"]
+    # MAX_CONTENT_LENGTH set to a generous global limit; camera-specific limit
+    # is enforced in the camera route via CAMERA_UPLOAD_MAX_BYTES.
+    app.config["MAX_CONTENT_LENGTH"] = _env_int(
+        "PRISM_MAX_CONTENT_LENGTH", 10 * 1024 * 1024
+    )
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
     app.config["CAMERA_UPLOAD_TOKEN"] = os.getenv("PRISM_CAMERA_UPLOAD_TOKEN", "")
@@ -164,8 +168,12 @@ def create_app(config_name=None):
 
     from app.services.notifications import configure_notification_broker
     from app.services.prediction_service import PredictionService
+    from app.services.camera_classification_service import CameraClassificationService
 
     configure_notification_broker(app)
+
+    # Initialize camera classification service (singleton)
+    app.extensions["camera_classifier"] = CameraClassificationService()
 
     # Initialize ML prediction service (gracefully degrades if no model file)
     ml_model_path = os.getenv("ML_MODEL_PATH", "").strip() or None
@@ -214,6 +222,11 @@ def create_app(config_name=None):
         request_id = getattr(g, "request_id", None)
         if request_id:
             response.headers["X-Request-ID"] = request_id
+
+        # Security response headers (M6 fix)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
         if _is_api_path(request.path):
             started_at = getattr(g, "request_started_at", None)

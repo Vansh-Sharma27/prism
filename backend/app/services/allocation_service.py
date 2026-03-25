@@ -199,16 +199,9 @@ def _batch_count_recent_recommendations(
     return {zone_id: int(count) for zone_id, count in rows}
 
 
-def _count_recent_recommendations(zone_id: str, minutes: int) -> int:
-    """Count recommendations for a single zone in the recent time window."""
-    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
-    count = (
-        db.session.query(func.count(Recommendation.id))
-        .filter(Recommendation.zone_id == zone_id)
-        .filter(Recommendation.created_at >= cutoff)
-        .scalar()
-    )
-    return int(count or 0)
+# Retention: prune recommendations older than this to prevent unbounded growth
+RETENTION_HOURS = 24
+_PRUNE_BATCH_SIZE = 500
 
 
 def _log_recommendation(
@@ -235,6 +228,23 @@ def _log_recommendation(
         logger.exception(
             "Failed to log recommendation | lot_id=%s zone_id=%s", lot_id, zone_id
         )
+        return
+
+    # Prune old recommendations to prevent unbounded table growth (H3 fix)
+    try:
+        cutoff = datetime.utcnow() - timedelta(hours=RETENTION_HOURS)
+        deleted = (
+            Recommendation.query
+            .filter(Recommendation.created_at < cutoff)
+            .limit(_PRUNE_BATCH_SIZE)
+            .delete(synchronize_session=False)
+        )
+        if deleted:
+            db.session.commit()
+            logger.info("Pruned %d old recommendations (older than %dh)", deleted, RETENTION_HOURS)
+    except Exception:
+        db.session.rollback()
+        logger.exception("Failed to prune old recommendations")
 
 
 def _build_reason(

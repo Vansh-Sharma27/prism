@@ -26,8 +26,9 @@ CONTENT_TYPE_EXTENSIONS = {
 def _require_ingest_token():
     token = current_app.config.get("CAMERA_UPLOAD_TOKEN", "")
     if not token:
+        current_app.logger.error("Camera ingest token not configured (PRISM_CAMERA_UPLOAD_TOKEN)")
         return error_response(
-            "Camera ingest token not configured. Set PRISM_CAMERA_UPLOAD_TOKEN.",
+            "Camera ingest service unavailable",
             503,
             code="token_not_configured",
         )
@@ -124,9 +125,10 @@ def upload_camera_image():
     classification_data = None
     classify_param = request.args.get("classify", "").strip().lower()
     if classify_param in ("true", "1", "yes"):
-        from app.services.camera_classification_service import CameraClassificationService
-
-        classifier = CameraClassificationService()
+        classifier = current_app.extensions.get("camera_classifier")
+        if classifier is None:
+            from app.services.camera_classification_service import CameraClassificationService
+            classifier = CameraClassificationService()
         result = classifier.classify(payload)
         classification_data = {
             "presence": result.presence.value,
