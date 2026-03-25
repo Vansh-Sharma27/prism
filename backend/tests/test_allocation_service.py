@@ -17,7 +17,7 @@ from app.services.allocation_service import (
     WEIGHT_WALK_DISTANCE,
     AllocationService,
     _build_reason,
-    _count_recent_recommendations,
+    _batch_count_recent_recommendations,
     _resolve_walk_time,
 )
 from seed import seed_campus_data
@@ -112,14 +112,14 @@ class TestBuildReason:
         assert "stable at 50%" in reason
 
 
-class TestCountRecentRecommendations:
-    """Test anti-herding recommendation counting."""
+class TestBatchCountRecentRecommendations:
+    """Test anti-herding recommendation counting (batch version)."""
 
-    def test_no_recommendations_returns_zero(self, app_client):
+    def test_no_recommendations_returns_empty(self, app_client):
         _, app = app_client
         with app.app_context():
-            count = _count_recent_recommendations("zone-a-east", minutes=5)
-            assert count == 0
+            counts = _batch_count_recent_recommendations(["zone-a-east"], minutes=5)
+            assert counts.get("zone-a-east", 0) == 0
 
     def test_counts_recent_recommendations(self, app_client):
         _, app = app_client
@@ -135,8 +135,8 @@ class TestCountRecentRecommendations:
             db.session.add(rec)
             db.session.commit()
 
-            count = _count_recent_recommendations("zone-a-east", minutes=5)
-            assert count == 1
+            counts = _batch_count_recent_recommendations(["zone-a-east"], minutes=5)
+            assert counts.get("zone-a-east", 0) == 1
 
     def test_ignores_old_recommendations(self, app_client):
         _, app = app_client
@@ -151,8 +151,8 @@ class TestCountRecentRecommendations:
             db.session.add(old_rec)
             db.session.commit()
 
-            count = _count_recent_recommendations("zone-a-east", minutes=5)
-            assert count == 0
+            counts = _batch_count_recent_recommendations(["zone-a-east"], minutes=5)
+            assert counts.get("zone-a-east", 0) == 0
 
 
 class TestAllocationServiceRecommend:

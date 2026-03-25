@@ -159,14 +159,9 @@ class TestSSEMaxDuration:
     """Verify SSE stream has a max-duration cap."""
 
     def test_sse_config_has_max_duration(self, app_with_db):
-        """App config should have SSE_MAX_DURATION_SECONDS."""
+        """App config should have SSE_MAX_DURATION_SECONDS set to 1800 (30 min)."""
         with app_with_db.app_context():
             assert "SSE_MAX_DURATION_SECONDS" in app_with_db.config
-            assert app_with_db.config["SSE_MAX_DURATION_SECONDS"] > 0
-            assert app_with_db.config["SSE_MAX_DURATION_SECONDS"] == 1800
-
-    def test_sse_default_is_30_minutes(self, app_with_db):
-        with app_with_db.app_context():
             assert app_with_db.config["SSE_MAX_DURATION_SECONDS"] == 1800
 
 
