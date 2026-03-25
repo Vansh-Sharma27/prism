@@ -425,6 +425,7 @@ class MQTTService:
                     )
                     nested.commit()
                 except Exception:
+                    nested.rollback()
                     logger.exception(
                         "MQTT heartbeat slot savepoint failed | lot_id=%s slot_id=%s",
                         lot_id,
