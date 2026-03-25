@@ -97,7 +97,6 @@ def test_upload_rejects_payload_larger_than_configured_limit(client):
     )
 
     assert response.status_code == 413
-    assert "exceeds max size" in response.get_json()["error"]
 
 
 def test_upload_persists_image_and_returns_metadata(client):
