@@ -39,10 +39,17 @@ def _verify_and_load_model(model_path: Path) -> Any | None:
     if os.getenv("ML_SKIP_INTEGRITY_CHECK", "false").lower() == "true":
         logger.warning("PredictionService: ML_SKIP_INTEGRITY_CHECK is set — bypassing integrity check")
         try:
-            return joblib.load(model_path)
+            loaded = joblib.load(model_path)
         except Exception:
             logger.exception("PredictionService: failed to load model from %s", model_path)
             return None
+        if not isinstance(loaded, RandomForestRegressor):
+            logger.error(
+                "PredictionService: loaded object is %s, expected RandomForestRegressor",
+                type(loaded).__name__,
+            )
+            return None
+        return loaded
 
     hash_path = model_path.with_suffix(model_path.suffix + ".sha256")
     if not hash_path.exists():

@@ -233,13 +233,20 @@ def _log_recommendation(
     # Prune old recommendations to prevent unbounded table growth (H3 fix)
     try:
         cutoff = datetime.utcnow() - timedelta(hours=RETENTION_HOURS)
-        deleted = (
-            Recommendation.query
+        # Two-step delete: select IDs first, then delete (limit + delete is invalid in SQLAlchemy)
+        stale_ids = (
+            db.session.query(Recommendation.id)
             .filter(Recommendation.created_at < cutoff)
             .limit(_PRUNE_BATCH_SIZE)
-            .delete(synchronize_session=False)
+            .all()
         )
-        if deleted:
+        if stale_ids:
+            id_list = [row[0] for row in stale_ids]
+            deleted = (
+                Recommendation.query
+                .filter(Recommendation.id.in_(id_list))
+                .delete(synchronize_session=False)
+            )
             db.session.commit()
             logger.info("Pruned %d old recommendations (older than %dh)", deleted, RETENTION_HOURS)
     except Exception:

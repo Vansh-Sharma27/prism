@@ -369,6 +369,7 @@ class MQTTService:
 
                 # P2 fix: savepoint per slot so one bad slot doesn't roll back
                 # all valid updates in the heartbeat batch.
+                nested = None
                 try:
                     nested = db.session.begin_nested()
                     # P2 fix: use SELECT FOR UPDATE to prevent race with concurrent slot updates
@@ -439,7 +440,8 @@ class MQTTService:
                     )
                     nested.commit()
                 except Exception:
-                    nested.rollback()
+                    if nested is not None:
+                        nested.rollback()
                     logger.exception(
                         "MQTT heartbeat slot savepoint failed | lot_id=%s slot_id=%s",
                         lot_id,

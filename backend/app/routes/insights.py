@@ -94,7 +94,6 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
         db.session.query(
             Zone.id,
             Zone.name,
-            Zone.walk_times,
             func.count(ParkingSlot.id).label("total_slots"),
             func.coalesce(
                 func.sum(case((ParkingSlot.is_occupied == True, 1), else_=0)),  # noqa: E712
@@ -103,13 +102,19 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
         )
         .outerjoin(ParkingSlot, ParkingSlot.zone_id == Zone.id)
         .filter(Zone.lot_id == lot_id)
-        .group_by(Zone.id, Zone.name, Zone.walk_times)
+        .group_by(Zone.id, Zone.name)
         .order_by(Zone.name.asc())
         .all()
     )
 
+    # Fetch walk_times separately (JSON column cannot be used in GROUP BY on PostgreSQL)
+    zone_walk_times = {
+        z.id: z.walk_times or {}
+        for z in Zone.query.filter_by(lot_id=lot_id).all()
+    }
+
     zone_rows: list[dict[str, Any]] = []
-    for zone_id, name, walk_times, total_slots, occupied_slots in rows:
+    for zone_id, name, total_slots, occupied_slots in rows:
         total = int(total_slots)
         occupied = int(occupied_slots)
         current_pct = round((occupied / total) * 100, 1) if total else 0.0
@@ -120,7 +125,7 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
                 "total_slots": total,
                 "occupied_slots": occupied,
                 "current_occupancy_pct": current_pct,
-                "walk_times": walk_times or {},
+                "walk_times": zone_walk_times.get(zone_id, {}),
             }
         )
 
