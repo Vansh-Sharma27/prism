@@ -8,6 +8,7 @@ is available, allowing the endpoint to fall back to heuristics.
 from __future__ import annotations
 
 import hashlib
+import io
 import logging
 import math
 import os
@@ -23,25 +24,25 @@ from app.ml.feature_engineering import FEATURE_COLUMNS
 logger = logging.getLogger(__name__)
 
 
-def _compute_file_sha256(path: Path) -> str:
-    """Return hex SHA-256 digest for a file, reading in 64 KiB chunks."""
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def _compute_buffer_sha256(data: bytes) -> str:
+    """Return hex SHA-256 digest for an in-memory buffer."""
+    return hashlib.sha256(data).hexdigest()
 
 
-def _verify_model_integrity(model_path: Path) -> bool:
-    """Verify model file SHA-256 against its sidecar .sha256 file.
+def _verify_and_load_model(model_path: Path) -> Any | None:
+    """Read model into memory, verify SHA-256, then deserialize.
 
-    Fail-closed: returns False when the sidecar is missing, empty, or
-    unreadable, ensuring unverified pickles are never deserialized.
-    Set env ``ML_SKIP_INTEGRITY_CHECK=true`` only for local development.
+    Eliminates the TOCTOU window between hash verification and
+    joblib.load() by operating entirely on an in-memory buffer.
+    Fail-closed: returns None when integrity check fails.
     """
     if os.getenv("ML_SKIP_INTEGRITY_CHECK", "false").lower() == "true":
         logger.warning("PredictionService: ML_SKIP_INTEGRITY_CHECK is set — bypassing integrity check")
-        return True
+        try:
+            return joblib.load(model_path)
+        except Exception:
+            logger.exception("PredictionService: failed to load model from %s", model_path)
+            return None
 
     hash_path = model_path.with_suffix(model_path.suffix + ".sha256")
     if not hash_path.exists():
@@ -49,34 +50,51 @@ def _verify_model_integrity(model_path: Path) -> bool:
             "PredictionService: .sha256 sidecar not found at %s — refusing to load unverified model",
             hash_path,
         )
-        return False
+        return None
 
     try:
-        raw = hash_path.read_text().strip()
-        if not raw:
+        raw_hash = hash_path.read_text().strip()
+        if not raw_hash:
             logger.error("PredictionService: .sha256 sidecar is empty at %s", hash_path)
-            return False
-        expected_hash = raw.split()[0].lower()
+            return None
+        expected_hash = raw_hash.split()[0].lower()
     except (IndexError, OSError, UnicodeDecodeError) as exc:
         logger.error("PredictionService: failed to read .sha256 sidecar at %s — %s", hash_path, exc)
-        return False
+        return None
 
+    # Read model file into memory ONCE — eliminates TOCTOU between hash and load
     try:
-        actual_hash = _compute_file_sha256(model_path)
+        model_bytes = model_path.read_bytes()
     except OSError as exc:
-        logger.error("PredictionService: failed to read model file for hashing at %s — %s", model_path, exc)
-        return False
+        logger.error("PredictionService: failed to read model file at %s — %s", model_path, exc)
+        return None
 
+    actual_hash = _compute_buffer_sha256(model_bytes)
     if actual_hash != expected_hash:
         logger.error(
             "PredictionService: integrity check FAILED — expected %s, got %s",
             expected_hash,
             actual_hash,
         )
-        return False
+        return None
 
     logger.info("PredictionService: SHA-256 integrity check passed")
-    return True
+
+    # Deserialize from the same buffer we just verified
+    try:
+        loaded = joblib.load(io.BytesIO(model_bytes))
+    except Exception:
+        logger.exception("PredictionService: failed to deserialize model from verified buffer")
+        return None
+
+    if not isinstance(loaded, RandomForestRegressor):
+        logger.error(
+            "PredictionService: loaded object is %s, expected RandomForestRegressor",
+            type(loaded).__name__,
+        )
+        return None
+
+    return loaded
 
 
 class PredictionService:
@@ -97,23 +115,13 @@ class PredictionService:
             logger.warning("PredictionService: model file not found at %s", path)
             return
 
-        if not _verify_model_integrity(path):
+        loaded = _verify_and_load_model(path)
+        if loaded is None:
             logger.error("PredictionService: refusing to load model with failed integrity check")
             return
 
-        try:
-            loaded = joblib.load(path)
-            if not isinstance(loaded, RandomForestRegressor):
-                logger.error(
-                    "PredictionService: loaded object is %s, expected RandomForestRegressor",
-                    type(loaded).__name__,
-                )
-                return
-            self._model = loaded
-            logger.info("PredictionService: loaded model from %s", path)
-        except Exception:
-            logger.exception("PredictionService: failed to load model from %s", path)
-            self._model = None
+        self._model = loaded
+        logger.info("PredictionService: loaded model from %s", path)
 
     @property
     def is_available(self) -> bool:

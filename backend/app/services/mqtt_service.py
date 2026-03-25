@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any
 
 import paho.mqtt.client as mqtt
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,9 @@ MQTT_TOPIC_PATTERN = "prism/+/slot/+"  # prism/{lot_id}/slot/{slot_id}
 HEARTBEAT_TOPIC_PATTERN = "prism/+/heartbeat"
 
 _MAX_LOG_PAYLOAD_LEN = 500
+
+# P3 fix: length/charset validation on MQTT topic IDs
+_TOPIC_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _safe_int(raw: str | None, default: int) -> int:
@@ -143,12 +148,22 @@ class MQTTService:
         try:
             if len(topic_parts) == 3 and topic_parts[2] == "heartbeat":
                 lot_id = topic_parts[1]
+                if not _TOPIC_ID_PATTERN.fullmatch(lot_id):
+                    logger.warning("MQTT topic ID validation failed | lot_id=%s", lot_id[:64])
+                    return
                 self._handle_heartbeat(lot_id, payload)
                 return
 
             if len(topic_parts) == 4 and topic_parts[2] == "slot":
                 lot_id = topic_parts[1]
                 slot_topic_id = topic_parts[3]
+                if not _TOPIC_ID_PATTERN.fullmatch(lot_id) or not _TOPIC_ID_PATTERN.fullmatch(slot_topic_id):
+                    logger.warning(
+                        "MQTT topic ID validation failed | lot_id=%s slot_topic_id=%s",
+                        lot_id[:64],
+                        slot_topic_id[:64],
+                    )
+                    return
                 self._handle_slot_update(lot_id, slot_topic_id, payload)
                 return
 
@@ -217,7 +232,11 @@ class MQTTService:
             from app.models.parking import OccupancyLog, ParkingEvent, ParkingSlot, SensorReading
             from app.services.notifications import build_slot_change_event, publish_notification_event
 
-            slot = db.session.get(ParkingSlot, slot_id)
+            # P2 fix: SELECT...FOR UPDATE prevents race conditions on concurrent
+            # MQTT messages for the same slot (duplicate ParkingEvents).
+            slot = db.session.execute(
+                select(ParkingSlot).where(ParkingSlot.id == slot_id).with_for_update()
+            ).scalar_one_or_none()
             if slot is None:
                 logger.warning(
                     "MQTT slot update dropped: slot not found | lot_id=%s slot_id=%s",
@@ -324,66 +343,93 @@ class MQTTService:
                 distance = self._parse_distance(snapshot.get("distance_cm"))
                 is_occupied = self._parse_occupied(snapshot, distance)
                 slot_id = self._resolve_slot_db_id(lot_id, slot_topic_id.strip())
-                slot = db.session.get(ParkingSlot, slot_id)
-                if slot is None:
+
+                # P3 fix: validate heartbeat slot_id against same pattern as topic IDs
+                if not _TOPIC_ID_PATTERN.fullmatch(slot_topic_id.strip()):
                     logger.warning(
-                        "MQTT heartbeat snapshot dropped: slot not found | lot_id=%s slot_id=%s",
+                        "MQTT heartbeat slot_id validation failed | lot_id=%s slot_id=%s",
                         lot_id,
-                        slot_id,
+                        slot_topic_id[:64],
                     )
                     continue
 
-                old_status = slot.is_occupied
-                slot.last_telemetry_at = received_at
-                if distance is not None:
-                    slot.last_distance_cm = distance
+                # P2 fix: savepoint per slot so one bad slot doesn't roll back
+                # all valid updates in the heartbeat batch.
+                try:
+                    nested = db.session.begin_nested()
+                    # P2 fix: use SELECT FOR UPDATE to prevent race with concurrent slot updates
+                    slot = db.session.execute(
+                        select(ParkingSlot).where(ParkingSlot.id == slot_id).with_for_update()
+                    ).scalar_one_or_none()
+                    if slot is None:
+                        logger.warning(
+                            "MQTT heartbeat snapshot dropped: slot not found | lot_id=%s slot_id=%s",
+                            lot_id,
+                            slot_id,
+                        )
+                        nested.rollback()
+                        continue
 
-                if is_occupied is None:
-                    continue
+                    old_status = slot.is_occupied
+                    slot.last_telemetry_at = received_at
+                    if distance is not None:
+                        slot.last_distance_cm = distance
 
-                slot.is_occupied = is_occupied
-                if distance is not None:
+                    if is_occupied is None:
+                        nested.commit()
+                        continue
+
+                    slot.is_occupied = is_occupied
+                    if distance is not None:
+                        db.session.add(
+                            SensorReading(
+                                slot_id=slot.id,
+                                distance_cm=distance,
+                                is_occupied=is_occupied,
+                                timestamp=received_at,
+                            )
+                        )
+
+                    if old_status == is_occupied:
+                        nested.commit()
+                        continue
+
+                    slot.last_status_change = received_at
+                    event_type = "entry" if is_occupied else "exit"
                     db.session.add(
-                        SensorReading(
+                        ParkingEvent(
                             slot_id=slot.id,
-                            distance_cm=distance,
-                            is_occupied=is_occupied,
+                            event_type=event_type,
+                            sensor_distance_cm=distance,
                             timestamp=received_at,
                         )
                     )
-
-                if old_status == is_occupied:
-                    continue
-
-                slot.last_status_change = received_at
-                event_type = "entry" if is_occupied else "exit"
-                db.session.add(
-                    ParkingEvent(
-                        slot_id=slot.id,
-                        event_type=event_type,
-                        sensor_distance_cm=distance,
-                        timestamp=received_at,
+                    db.session.add(
+                        OccupancyLog(
+                            slot_id=slot.id,
+                            status="occupied" if is_occupied else "vacant",
+                            distance_cm=distance,
+                            timestamp=received_at,
+                        )
                     )
-                )
-                db.session.add(
-                    OccupancyLog(
-                        slot_id=slot.id,
-                        status="occupied" if is_occupied else "vacant",
-                        distance_cm=distance,
-                        timestamp=received_at,
+                    notification_events.append(
+                        build_slot_change_event(
+                            slot_id=slot.id,
+                            lot_id=slot.lot_id,
+                            zone_id=slot.zone_id,
+                            is_occupied=slot.is_occupied,
+                            event_type=event_type,
+                            source="heartbeat",
+                            distance_cm=distance,
+                        )
                     )
-                )
-                notification_events.append(
-                    build_slot_change_event(
-                        slot_id=slot.id,
-                        lot_id=slot.lot_id,
-                        zone_id=slot.zone_id,
-                        is_occupied=slot.is_occupied,
-                        event_type=event_type,
-                        source="heartbeat",
-                        distance_cm=distance,
+                    nested.commit()
+                except Exception:
+                    logger.exception(
+                        "MQTT heartbeat slot savepoint failed | lot_id=%s slot_id=%s",
+                        lot_id,
+                        slot_id,
                     )
-                )
 
             try:
                 db.session.commit()
