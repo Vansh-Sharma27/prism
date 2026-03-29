@@ -17,6 +17,15 @@ class UserRegisterSchema(Schema):
         load_default="student"
     )
 
+    @validates("password")
+    def validate_password_complexity(self, value, **kwargs):
+        """Ensure password has minimum complexity."""
+        if value and len(value) >= 8:
+            has_letter = any(c.isalpha() for c in value)
+            has_digit = any(c.isdigit() for c in value)
+            if not (has_letter and has_digit):
+                raise ValidationError("Password must contain at least one letter and one digit.")
+
 
 class UserLoginSchema(Schema):
     """Validates login input."""
@@ -58,7 +67,7 @@ class ZoneSchema(Schema):
     id = fields.Str(required=True, validate=validate.Length(min=1, max=50))
     lot_id = fields.Str(required=True)
     name = fields.Str(required=True, validate=validate.Length(min=1, max=100))
-    walk_times = fields.Dict(keys=fields.Str(), values=fields.Int())
+    walk_times = fields.Dict(keys=fields.Str(), values=fields.Float())
 
 
 class ParkingSlotSchema(Schema):
@@ -78,7 +87,7 @@ class SlotStatusUpdateSchema(Schema):
     """Validates slot status update."""
     is_occupied = fields.Bool()
     is_reserved = fields.Bool()
-    distance_cm = fields.Float()
+    distance_cm = fields.Float(validate=validate.Range(min=0, max=1000))
 
 
 class SlotResponseSchema(Schema):

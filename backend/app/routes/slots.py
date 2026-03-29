@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 slots_bp = Blueprint("slots", __name__)
 
 MAX_EVENTS_LIMIT = 500
+MAX_BATCH_SIZE = 100
 
 
 def _require_read_access():
@@ -207,6 +208,13 @@ def batch_update_slot_status():
     if not isinstance(updates, list) or len(updates) == 0:
         return error_response(
             "updates must be a non-empty array",
+            400,
+            code="validation_error",
+        )
+
+    if len(updates) > MAX_BATCH_SIZE:
+        return error_response(
+            f"Batch size exceeds maximum of {MAX_BATCH_SIZE} items",
             400,
             code="validation_error",
         )

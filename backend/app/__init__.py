@@ -227,6 +227,10 @@ def create_app(config_name=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if os.getenv("PRISM_ENABLE_HSTS", "false").lower() == "true":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         if _is_api_path(request.path):
             started_at = getattr(g, "request_started_at", None)

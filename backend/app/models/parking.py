@@ -57,15 +57,8 @@ class ParkingSlot(db.Model):
     occupancy_logs = db.relationship('OccupancyLog', backref='slot', lazy='dynamic')
     
     def to_dict(self):
-        latest_log = self.occupancy_logs.order_by(OccupancyLog.timestamp.desc()).first()
         latest_distance = self.last_distance_cm
         latest_seen = self.last_telemetry_at
-
-        if latest_log is not None:
-            if latest_distance is None:
-                latest_distance = latest_log.distance_cm
-            if latest_seen is None:
-                latest_seen = latest_log.timestamp
 
         return {
             'id': self.id,
@@ -117,7 +110,12 @@ class ParkingEvent(db.Model):
     event_type = db.Column(db.String(10), nullable=False)  # 'entry' or 'exit'
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     sensor_distance_cm = db.Column(db.Float)
-    
+
+    __table_args__ = (
+        db.Index('idx_parking_events_slot_time', 'slot_id', 'timestamp'),
+        db.Index('idx_parking_events_timestamp', 'timestamp'),
+    )
+
     def to_dict(self):
         return {
             'id': self.id,
