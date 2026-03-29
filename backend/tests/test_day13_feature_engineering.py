@@ -9,7 +9,6 @@ from app.ml.feature_engineering import FEATURE_COLUMNS, engineer_features
 from app.ml.training_data import CANONICAL_TRAINING_COLUMNS
 
 
-
 def _build_training_frame() -> pd.DataFrame:
     """Build a 5-row-per-zone canonical training frame with consistent counts.
 

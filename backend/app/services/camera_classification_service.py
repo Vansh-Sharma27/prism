@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from types import MappingProxyType
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class VehiclePresence(str, Enum):
+class VehiclePresence(StrEnum):
     """Classification result for a camera frame."""
 
     PRESENT = "present"

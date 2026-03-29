@@ -166,9 +166,9 @@ def create_app(config_name=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
+    from app.services.camera_classification_service import CameraClassificationService
     from app.services.notifications import configure_notification_broker
     from app.services.prediction_service import PredictionService
-    from app.services.camera_classification_service import CameraClassificationService
 
     configure_notification_broker(app)
 
@@ -227,7 +227,10 @@ def create_app(config_name=None):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        )
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if os.getenv("PRISM_ENABLE_HSTS", "false").lower() == "true":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -279,13 +282,13 @@ def create_app(config_name=None):
         return error_response("Internal server error", 500)
 
     # Register blueprints
+    from app import models  # noqa: F401 - ensure model metadata is loaded
     from app.routes.auth import auth_bp
     from app.routes.camera import camera_bp
     from app.routes.health import health_bp
     from app.routes.insights import insights_bp
     from app.routes.lots import lots_bp
     from app.routes.slots import slots_bp
-    from app import models  # noqa: F401 - ensure model metadata is loaded
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")

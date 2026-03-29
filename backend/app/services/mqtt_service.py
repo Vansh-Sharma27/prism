@@ -136,7 +136,8 @@ class MQTTService:
 
         self._reconnect_attempt += 1
         logger.warning(
-            "MQTT disconnected unexpectedly | reason_code=%s reconnect_attempt=%s next_backoff_seconds=%s broker=%s port=%s",
+            "MQTT disconnected unexpectedly | reason_code=%s reconnect_attempt=%s "
+            "next_backoff_seconds=%s broker=%s port=%s",
             reason_code,
             self._reconnect_attempt,
             self._next_backoff_seconds(),

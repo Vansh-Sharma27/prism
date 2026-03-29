@@ -11,7 +11,6 @@ from app import create_app, db
 from app.models.parking import SensorReading
 from seed import seed_campus_data
 
-
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "export_training_dataset.py"
 
 

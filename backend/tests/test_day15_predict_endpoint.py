@@ -5,13 +5,13 @@ Tests both ML-backed prediction and heuristic fallback behavior.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from app import create_app, db
-from app.models.parking import OccupancyLog, ParkingEvent, ParkingSlot
+from app.models.parking import ParkingSlot
 from seed import seed_campus_data
 
 

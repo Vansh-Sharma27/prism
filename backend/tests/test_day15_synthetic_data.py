@@ -5,7 +5,7 @@ Written FIRST per TDD — these define the contract before any implementation.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 

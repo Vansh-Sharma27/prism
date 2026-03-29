@@ -8,7 +8,6 @@ import pytest
 
 from app.ml.training_data import CANONICAL_TRAINING_COLUMNS, normalize_external_training_rows, validate_canonical_row
 
-
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "combine_training_data.py"
 
 

@@ -89,7 +89,7 @@ class AllocationService:
 
         scores: list[ZoneScore] = []
 
-        for zone_data, pred in zip(zone_rows, predictions):
+        for zone_data, pred in zip(zone_rows, predictions, strict=False):
             zone_id = zone_data["zone_id"]
             total_slots = zone_data["total_slots"]
             occupied_slots = zone_data["occupied_slots"]

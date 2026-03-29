@@ -1,7 +1,7 @@
 """
 Marshmallow schemas for request/response validation.
 """
-from marshmallow import Schema, fields, validate, validates, ValidationError
+from marshmallow import Schema, ValidationError, fields, validate, validates
 
 
 class UserRegisterSchema(Schema):

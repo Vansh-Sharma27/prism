@@ -9,11 +9,11 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 from typing import Any
 
-import hashlib
 import joblib
 import numpy as np
 import pandas as pd
@@ -114,7 +114,7 @@ def train_occupancy_model(
     # Feature importances
     feature_importances = {
         name: round(float(imp), 6)
-        for name, imp in zip(FEATURE_COLUMNS, model.feature_importances_)
+        for name, imp in zip(FEATURE_COLUMNS, model.feature_importances_, strict=False)
     }
 
     # Save model

@@ -116,7 +116,7 @@ def get_lots_summary():
 
     total_slots = sum(lot.total_slots for lot in lots)
     available = sum(avail_map.get(lot.id, 0) for lot in lots)
-    
+
     return jsonify({
         'total_lots': len(lots),
         'total_slots': total_slots,

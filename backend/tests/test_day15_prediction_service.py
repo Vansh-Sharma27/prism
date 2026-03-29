@@ -7,9 +7,7 @@ model loading, prediction clamping, trend computation, and graceful fallback.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
 from app.ml.feature_engineering import FEATURE_COLUMNS

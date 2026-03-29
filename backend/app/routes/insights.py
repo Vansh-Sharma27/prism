@@ -132,7 +132,9 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
     return lot, zone_rows
 
 
-def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _prediction_rows(
+    zone_rows: list[dict[str, Any]], day: str, hour: int
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Generate predictions using ML model if available, otherwise heuristic fallback.
 
     Returns (predictions_list, model_metadata_dict).

@@ -1,14 +1,14 @@
 """
 Authentication routes for user registration and login.
 """
-from flask import Blueprint, current_app, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask import Blueprint, current_app, jsonify, request
+from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from app import db, limiter
 from app.models.user import User
 from app.responses import error_response
-from app.schemas import user_register_schema, user_login_schema, user_response_schema
+from app.schemas import user_login_schema, user_register_schema, user_response_schema
 
 auth_bp = Blueprint('auth', __name__)
 

@@ -9,7 +9,7 @@ from app import db
 class ParkingLot(db.Model):
     """Represents a parking lot/zone."""
     __tablename__ = 'parking_lots'
-    
+
     id = db.Column(db.String(50), primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(200))
@@ -18,11 +18,11 @@ class ParkingLot(db.Model):
     longitude = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     slots = db.relationship('ParkingSlot', backref='lot', lazy='dynamic')
     zones = db.relationship('Zone', backref='lot', lazy='dynamic')
-    
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -38,7 +38,7 @@ class ParkingLot(db.Model):
 class ParkingSlot(db.Model):
     """Represents an individual parking slot."""
     __tablename__ = 'parking_slots'
-    
+
     id = db.Column(db.String(50), primary_key=True)
     lot_id = db.Column(db.String(50), db.ForeignKey('parking_lots.id'), nullable=False)
     zone_id = db.Column(db.String(50), db.ForeignKey('zones.id'), nullable=True)
@@ -51,11 +51,11 @@ class ParkingSlot(db.Model):
     last_telemetry_at = db.Column(db.DateTime)
     last_distance_cm = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     events = db.relationship('ParkingEvent', backref='slot', lazy='dynamic')
     occupancy_logs = db.relationship('OccupancyLog', backref='slot', lazy='dynamic')
-    
+
     def to_dict(self):
         latest_distance = self.last_distance_cm
         latest_seen = self.last_telemetry_at
@@ -104,7 +104,7 @@ class Zone(db.Model):
 class ParkingEvent(db.Model):
     """Records parking events (entry/exit)."""
     __tablename__ = 'parking_events'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     slot_id = db.Column(db.String(50), db.ForeignKey('parking_slots.id'), nullable=False)
     event_type = db.Column(db.String(10), nullable=False)  # 'entry' or 'exit'
@@ -128,13 +128,13 @@ class ParkingEvent(db.Model):
 class SensorReading(db.Model):
     """Raw sensor readings for ML training."""
     __tablename__ = 'sensor_readings'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     slot_id = db.Column(db.String(50), db.ForeignKey('parking_slots.id'), nullable=False)
     distance_cm = db.Column(db.Float, nullable=False)
     is_occupied = db.Column(db.Boolean, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     __table_args__ = (
         db.Index('idx_sensor_readings_slot_time', 'slot_id', 'timestamp'),
     )

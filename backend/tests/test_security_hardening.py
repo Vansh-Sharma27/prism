@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import hashlib
-import io
-from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from app import create_app, db
-from app.models.parking import OccupancyLog, ParkingEvent, ParkingSlot
-from app.services.mqtt_service import MQTTService, _TOPIC_ID_PATTERN
+from app.models.parking import ParkingEvent, ParkingSlot
+from app.services.mqtt_service import _TOPIC_ID_PATTERN, MQTTService
 from seed import seed_campus_data
 
 

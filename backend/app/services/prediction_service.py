@@ -19,7 +19,7 @@ import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 
-from app.ml.feature_engineering import FEATURE_COLUMNS
+from app.ml.feature_engineering import FEATURE_COLUMNS  # noqa: F401 - referenced in comment
 
 logger = logging.getLogger(__name__)
 

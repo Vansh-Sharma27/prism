@@ -12,12 +12,10 @@ Generates realistic campus parking occupancy data with temporal patterns:
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
-
-from app.ml.training_data import CANONICAL_TRAINING_COLUMNS
 
 # Campus zones with different characteristics
 _ZONES = (
@@ -103,7 +101,7 @@ def generate_synthetic_training_data(
     rows_per_zone = max(1, math.ceil(n_rows / n_zones))
 
     # Generate timestamps spanning _SPAN_DAYS at _INTERVAL_MINUTES intervals
-    start_dt = datetime(2026, 2, 23, 0, 0, 0, tzinfo=timezone.utc)
+    start_dt = datetime(2026, 2, 23, 0, 0, 0, tzinfo=UTC)
     total_intervals = (_SPAN_DAYS * 24 * 60) // _INTERVAL_MINUTES
 
     # If we need more rows per zone than available intervals, reduce interval
@@ -114,7 +112,6 @@ def generate_synthetic_training_data(
         interval_indices = (interval_indices * repeats)[:rows_per_zone]
     else:
         # Sample evenly spaced intervals
-        all_indices = np.arange(total_intervals)
         step = total_intervals / rows_per_zone
         interval_indices = [int(i * step) for i in range(rows_per_zone)]
 

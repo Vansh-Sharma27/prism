@@ -8,16 +8,11 @@ from pathlib import Path
 import pytest
 
 from app import create_app, db
-from app.models.parking import ParkingSlot, Recommendation, Zone
+from app.models.parking import Recommendation, Zone
 from app.services.allocation_service import (
-    HERDING_PENALTY_PER_REC,
-    HERDING_WINDOW_MINUTES,
-    WEIGHT_AVAILABILITY,
-    WEIGHT_PREDICTION,
-    WEIGHT_WALK_DISTANCE,
     AllocationService,
-    _build_reason,
     _batch_count_recent_recommendations,
+    _build_reason,
     _resolve_walk_time,
 )
 from seed import seed_campus_data

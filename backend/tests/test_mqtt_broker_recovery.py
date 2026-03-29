@@ -16,7 +16,6 @@ from app.models.parking import ParkingSlot
 from app.services.mqtt_service import MQTTService
 from seed import seed_campus_data
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
