@@ -11,6 +11,13 @@ interface PollingState<T> {
   retry: () => void;
 }
 
+const BACKOFF_MAX_MS = 60_000;
+
+function nextBackoff(current: number, baseInterval: number): number {
+  if (current === 0) return baseInterval;
+  return Math.min(current * 2, BACKOFF_MAX_MS);
+}
+
 export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): PollingState<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,14 +26,17 @@ export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): Po
   const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const hasFetchedAtLeastOnce = useRef(false);
+  const backoffMs = useRef(0);
 
   const retry = useCallback(() => {
+    backoffMs.current = 0;
     setRetryNonce((value) => value + 1);
   }, []);
 
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    backoffMs.current = 0;
 
     const poll = async () => {
       const initialLoad = !hasFetchedAtLeastOnce.current;
@@ -45,6 +55,7 @@ export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): Po
         setData(result);
         setError(null);
         setRefreshedAt(Math.floor(Date.now() / 1000));
+        backoffMs.current = 0;
       } catch (err) {
         if (!mounted) {
           return;
@@ -52,12 +63,14 @@ export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs = 10000): Po
 
         const message = err instanceof Error ? err.message : "Unexpected polling error";
         setError(message);
+        backoffMs.current = nextBackoff(backoffMs.current, intervalMs);
       } finally {
         if (mounted) {
           hasFetchedAtLeastOnce.current = true;
           setLoading(false);
           setRefreshing(false);
-          timeoutId = setTimeout(poll, intervalMs);
+          const delay = backoffMs.current > 0 ? backoffMs.current : intervalMs;
+          timeoutId = setTimeout(poll, delay);
         }
       }
     };

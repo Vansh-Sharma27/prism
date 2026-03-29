@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint .",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:e2e:hydration": "playwright test --config=playwright.config.ts tests/e2e/hydration-console.spec.ts",
     "test:e2e:auth": "playwright test --config=playwright.config.ts tests/e2e/auth-flows.spec.ts"

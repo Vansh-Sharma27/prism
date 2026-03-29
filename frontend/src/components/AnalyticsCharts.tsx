@@ -227,34 +227,18 @@ export function PeakHoursHeatmap({ data }: { data: HourHeatmapData[] }) {
 }
 
 export function AnalyticsCharts({ hourlyOccupancy, zoneUtilization, peakHours }: AnalyticsChartsProps) {
-  const mockHourlyData = useMemo<OccupancyDataPoint[]>(
-    () =>
-      hourlyOccupancy ||
-      Array.from({ length: 24 }, (_, i) => ({
-        time: `${String(i).padStart(2, "0")}:00`,
-        // Deterministic pattern: morning peak, lunch dip, afternoon peak
-        occupancy: 30 + Math.sin(i * 0.5) * 25 + (i % 3) * 3,
-      })),
-    [hourlyOccupancy]
-  );
-
-  const mockZoneData = useMemo<ZoneUtilization[]>(
-    () =>
-      zoneUtilization || [
-        { name: "Zone A1", utilization: 75, vacant: 25 },
-        { name: "Zone A2", utilization: 45, vacant: 55 },
-        { name: "East Wing", utilization: 90, vacant: 10 },
-        { name: "West Wing", utilization: 30, vacant: 70 },
-      ],
-    [zoneUtilization]
-  );
+  // Only render charts with real data. Pass empty arrays to trigger the
+  // "no data available" empty states inside each chart component rather than
+  // showing synthetic/mock data that could mislead the user.
+  const hourlyData = hourlyOccupancy ?? [];
+  const zoneData = zoneUtilization ?? [];
 
   return (
     <div className="mb-8 space-y-6">
-      <OccupancyTrendChart data={mockHourlyData} />
+      <OccupancyTrendChart data={hourlyData} />
       <div className="grid gap-6 lg:grid-cols-2">
-        <ZoneUtilizationChart data={mockZoneData} />
-        <PeakHoursHeatmap data={peakHours || []} />
+        <ZoneUtilizationChart data={zoneData} />
+        <PeakHoursHeatmap data={peakHours ?? []} />
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import type { ParkingLot, ParkingSlot, SystemStats } from "@/types/parking";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-const OFFLINE_THRESHOLD_SECONDS = 30;
+const OFFLINE_THRESHOLD_SECONDS = 90;
 export const AUTH_TOKEN_STORAGE_KEY = "prism_access_token";
 export const AUTH_SESSION_INVALID_EVENT = "prism:auth-session-invalid";
 
@@ -481,9 +481,11 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
   return response.user;
 }
 
+// Returns 0 when the timestamp is absent or unparseable.
+// Callers MUST treat 0 as "no telemetry ever received" (maps to offline status).
 function parseTimestamp(value?: string | null): number {
   if (!value) {
-    return Math.floor(Date.now() / 1000);
+    return 0;
   }
 
   // Backend emits naive ISO strings (no timezone); interpret them as UTC.
@@ -492,7 +494,7 @@ function parseTimestamp(value?: string | null): number {
 
   const parsed = Date.parse(normalized);
   if (Number.isNaN(parsed)) {
-    return Math.floor(Date.now() / 1000);
+    return 0;
   }
 
   return Math.floor(parsed / 1000);
@@ -529,6 +531,10 @@ function deriveDistance(slot: ApiSlot): number {
 }
 
 function deriveStatus(lastUpdate: number, occupied: boolean): SlotStatus {
+  // lastUpdate === 0 means no telemetry has ever been received.
+  if (lastUpdate === 0) {
+    return "offline";
+  }
   const ageSeconds = Math.floor(Date.now() / 1000) - lastUpdate;
   if (ageSeconds > OFFLINE_THRESHOLD_SECONDS) {
     return "offline";
@@ -611,16 +617,15 @@ function buildZoneSummary(slots: ParkingSlot[]): ZoneSummary[] {
       offline: 0,
     };
 
-    current.total += 1;
-    if (slot.status === "occupied") {
-      current.occupied += 1;
-    } else if (slot.status === "vacant") {
-      current.vacant += 1;
-    } else {
-      current.offline += 1;
-    }
+    const updated: ZoneSummary = {
+      ...current,
+      total: current.total + 1,
+      occupied: current.occupied + (slot.status === "occupied" ? 1 : 0),
+      vacant: current.vacant + (slot.status === "vacant" ? 1 : 0),
+      offline: current.offline + (slot.status === "offline" ? 1 : 0),
+    };
 
-    zoneMap.set(zoneId, current);
+    zoneMap.set(zoneId, updated);
   }
 
   return Array.from(zoneMap.values()).sort((a, b) => a.name.localeCompare(b.name));
@@ -661,9 +666,10 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 }
 
 export async function fetchLotDetailData(lotId: string): Promise<LotDetailData> {
+  const safeLotId = encodeURIComponent(lotId);
   const [lotResponse, slotsResponse] = await Promise.all([
-    fetchJson<ApiLot>(`${API_BASE}/lots/${lotId}`),
-    fetchJson<ApiSlotsResponse>(`${API_BASE}/slots?lot_id=${lotId}`),
+    fetchJson<ApiLot>(`${API_BASE}/lots/${safeLotId}`),
+    fetchJson<ApiSlotsResponse>(`${API_BASE}/slots?lot_id=${safeLotId}`),
   ]);
 
   const mappedSlots = slotsResponse.slots.map(mapApiSlot);
@@ -715,12 +721,13 @@ export async function fetchLotPrediction(
   day: string,
   time: string
 ): Promise<LotPredictionData> {
+  const safeLotId = encodeURIComponent(lotId);
   const query = new URLSearchParams({
     day,
     time,
   });
   const response = await fetchJson<ApiLotPredictionResponse>(
-    `${API_BASE}/lots/${lotId}/predict?${query.toString()}`
+    `${API_BASE}/lots/${safeLotId}/predict?${query.toString()}`
   );
 
   return {
@@ -738,13 +745,14 @@ export async function fetchLotRecommendation(
   day: string,
   time: string
 ): Promise<LotRecommendationData> {
+  const safeLotId = encodeURIComponent(lotId);
   const query = new URLSearchParams({
     destination,
     day,
     time,
   });
   const response = await fetchJson<ApiLotRecommendationResponse>(
-    `${API_BASE}/lots/${lotId}/recommend?${query.toString()}`
+    `${API_BASE}/lots/${safeLotId}/recommend?${query.toString()}`
   );
 
   return {
