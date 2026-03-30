@@ -161,6 +161,7 @@ export function Navbar() {
 
             {/* Mobile Menu Button - minimum 44x44 touch target */}
             <button
+              type="button"
               onClick={() => setMobileOpen(!mobileOpen)}
               className="flex md:hidden h-11 w-11 items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border-default)] text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)] cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]"
               aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}

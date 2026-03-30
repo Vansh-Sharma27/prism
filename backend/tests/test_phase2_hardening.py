@@ -181,10 +181,7 @@ def test_manual_slot_update_refreshes_telemetry_for_admin_sensor_health(client):
 
 def test_event_filter_queries_are_deterministic(client):
     headers = _auth_headers(client, "faculty@prism.local", "Faculty@12345")
-    query = (
-        "/api/v1/events?lot_id=lot-a&event_type=entry"
-        "&start=2026-03-01T09:00:00&end=2026-03-01T10:30:00&limit=10"
-    )
+    query = "/api/v1/events?lot_id=lot-a&event_type=entry&start=2026-03-01T09:00:00&end=2026-03-01T10:30:00&limit=10"
 
     first = client.get(query, headers=headers)
     second = client.get(query, headers=headers)

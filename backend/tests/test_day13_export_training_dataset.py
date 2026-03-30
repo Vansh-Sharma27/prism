@@ -11,9 +11,7 @@ from app import create_app, db
 from app.models.parking import SensorReading
 from seed import seed_campus_data
 
-
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "export_training_dataset.py"
-
 
 
 def _load_script_module():
@@ -90,7 +88,6 @@ def seeded_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return app
 
 
-
 def test_export_training_dataset_writes_bucketed_zone_rows(seeded_app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     output_path = tmp_path / "training_export.csv"
     module = _load_script_module()
@@ -130,7 +127,6 @@ def test_export_training_dataset_writes_bucketed_zone_rows(seeded_app, tmp_path:
     assert rows[1]["occupancy_pct"] == "66.7"
     assert rows[1]["avg_distance_cm"] == "35.0"
     assert rows[1]["coverage_pct"] == "100.0"
-
 
 
 def test_export_training_dataset_rejects_invalid_bucket_minutes(seeded_app, tmp_path: Path):

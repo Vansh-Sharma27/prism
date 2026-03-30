@@ -87,10 +87,7 @@ def test_day7_register_login_and_live_updates_flow(client):
     assert events_response.status_code == 200
     events_payload = events_response.get_json()
     assert events_payload["total"] >= 1
-    assert any(
-        event["slot_id"] == slot_id and event["event_type"] == "entry"
-        for event in events_payload["events"]
-    )
+    assert any(event["slot_id"] == slot_id and event["event_type"] == "entry" for event in events_payload["events"])
 
     summary_after = client.get("/api/v1/lots/summary", headers=headers)
     assert summary_after.status_code == 200

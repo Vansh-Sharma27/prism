@@ -41,8 +41,12 @@ function parseJwtExpiry(token: string): number | null {
 
     const base64 = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
     const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-    const decoded = JSON.parse(window.atob(`${base64}${padding}`)) as { exp?: number };
-    return typeof decoded.exp === "number" ? decoded.exp : null;
+    const decoded: unknown = JSON.parse(window.atob(`${base64}${padding}`));
+    if (typeof decoded !== "object" || decoded === null) {
+      return null;
+    }
+    const exp = (decoded as Record<string, unknown>).exp;
+    return typeof exp === "number" ? exp : null;
   } catch {
     return null;
   }

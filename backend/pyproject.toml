@@ -1,0 +1,36 @@
+[tool.bandit]
+exclude_dirs = ["tests", "venv", "migrations"]
+skips = ["B101"]  # Allow assert in non-test code for schema validation
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "S",    # flake8-bandit
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "S101",   # assert used (OK in tests and schema validation)
+    "S104",   # bind to 0.0.0.0 (OK for dev server)
+    "S603",   # subprocess with shell=False (not applicable)
+    "E712",   # comparison to True/False (SQLAlchemy filter pattern)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S105", "S106", "S107", "S607"]  # Allow asserts, test secrets, docker commands
+"migrations/**/*.py" = ["E501"]             # Allow long lines in migrations
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

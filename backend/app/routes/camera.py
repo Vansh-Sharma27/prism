@@ -26,8 +26,9 @@ CONTENT_TYPE_EXTENSIONS = {
 def _require_ingest_token():
     token = current_app.config.get("CAMERA_UPLOAD_TOKEN", "")
     if not token:
+        current_app.logger.error("Camera ingest token not configured (PRISM_CAMERA_UPLOAD_TOKEN)")
         return error_response(
-            "Camera ingest token not configured. Set PRISM_CAMERA_UPLOAD_TOKEN.",
+            "Camera ingest service unavailable",
             503,
             code="token_not_configured",
         )
@@ -104,11 +105,16 @@ def upload_camera_image():
         )
 
     safe_camera_id = SAFE_FILENAME_PATTERN.sub("-", camera_id)
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+    upload_ts = datetime.utcnow()
+    timestamp = upload_ts.strftime("%Y%m%dT%H%M%S%f")
     filename = f"{safe_camera_id}_{timestamp}_{secrets.token_hex(3)}{extension}"
 
     upload_dir = _resolve_upload_dir()
-    file_path = upload_dir / filename
+    file_path = (upload_dir / filename).resolve()
+
+    # Ensure resolved path stays within the upload directory (symlink/traversal guard)
+    if not file_path.is_relative_to(upload_dir.resolve()):
+        return error_response("Invalid upload path", 400, code="validation_error")
 
     try:
         file_path.write_bytes(payload)
@@ -120,16 +126,35 @@ def upload_camera_image():
         )
         return error_response("Failed to persist camera image", 500)
 
+    # Optional classification
+    classification_data = None
+    classify_param = request.args.get("classify", "").strip().lower()
+    if classify_param in ("true", "1", "yes"):
+        classifier = current_app.extensions.get("camera_classifier")
+        if classifier is None:
+            from app.services.camera_classification_service import CameraClassificationService
+
+            classifier = CameraClassificationService()
+        result = classifier.classify(payload)
+        classification_data = {
+            "presence": result.presence.value,
+            "confidence": result.confidence,
+            "method": result.method,
+            "metadata": dict(result.metadata),
+        }
+
+    response_data = {
+        "status": "received",
+        "camera_id": camera_id,
+        "filename": filename,
+        "bytes_received": len(payload),
+        "content_type": content_type,
+        "uploaded_at": upload_ts.isoformat(),
+    }
+    if classification_data is not None:
+        response_data["classification"] = classification_data
+
     return (
-        jsonify(
-            {
-                "status": "received",
-                "camera_id": camera_id,
-                "filename": filename,
-                "bytes_received": len(payload),
-                "content_type": content_type,
-                "uploaded_at": datetime.utcnow().isoformat(),
-            }
-        ),
+        jsonify(response_data),
         201,
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import datetime
@@ -13,28 +14,23 @@ from uuid import uuid4
 import redis
 from flask import current_app
 
-
 logger = logging.getLogger(__name__)
 
 
 class NotificationSubscription(Protocol):
-    def get(self, timeout: int) -> dict[str, Any] | None:
-        ...
+    def get(self, timeout: int) -> dict[str, Any] | None: ...
 
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
 
 class NotificationBroker(Protocol):
-    def publish(self, event: dict[str, Any]) -> None:
-        ...
+    def publish(self, event: dict[str, Any]) -> None: ...
 
-    def subscribe(self) -> NotificationSubscription:
-        ...
+    def subscribe(self) -> NotificationSubscription: ...
 
 
 class InMemorySubscription:
-    def __init__(self, broker: "InMemoryNotificationBroker", subscriber_id: str, queue: Queue):
+    def __init__(self, broker: InMemoryNotificationBroker, subscriber_id: str, queue: Queue):
         self._broker = broker
         self._subscriber_id = subscriber_id
         self._queue = queue
@@ -76,14 +72,10 @@ class InMemoryNotificationBroker:
             try:
                 queue.put_nowait(event)
             except Full:
-                try:
+                with contextlib.suppress(Exception):
                     queue.get_nowait()
-                except Exception:
-                    pass
-                try:
+                with contextlib.suppress(Exception):
                     queue.put_nowait(event)
-                except Exception:
-                    pass
 
 
 class RedisSubscription:
@@ -100,7 +92,10 @@ class RedisSubscription:
         try:
             return json.loads(data)
         except (json.JSONDecodeError, TypeError):
-            logger.warning("Malformed Redis pub/sub payload dropped: %s", data[:200] if isinstance(data, str) else type(data))
+            logger.warning(
+                "Malformed Redis pub/sub payload dropped: %s",
+                data[:200] if isinstance(data, str) else type(data),
+            )
             return None
 
     def close(self) -> None:

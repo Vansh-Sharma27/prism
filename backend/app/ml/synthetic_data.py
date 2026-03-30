@@ -12,12 +12,10 @@ Generates realistic campus parking occupancy data with temporal patterns:
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
-
-from app.ml.training_data import CANONICAL_TRAINING_COLUMNS
 
 # Campus zones with different characteristics
 _ZONES = (
@@ -29,21 +27,38 @@ _ZONES = (
 
 # Time-of-day occupancy curve (hour -> base occupancy percentage)
 _HOURLY_CURVE: dict[int, float] = {
-    0: 3.0, 1: 2.0, 2: 2.0, 3: 2.0, 4: 2.0, 5: 3.0,
-    6: 10.0, 7: 25.0,
-    8: 65.0, 9: 78.0, 10: 72.0,
-    11: 58.0, 12: 50.0, 13: 48.0,
-    14: 62.0, 15: 74.0, 16: 70.0, 17: 55.0,
-    18: 35.0, 19: 18.0,
-    20: 12.0, 21: 8.0, 22: 5.0, 23: 4.0,
+    0: 3.0,
+    1: 2.0,
+    2: 2.0,
+    3: 2.0,
+    4: 2.0,
+    5: 3.0,
+    6: 10.0,
+    7: 25.0,
+    8: 65.0,
+    9: 78.0,
+    10: 72.0,
+    11: 58.0,
+    12: 50.0,
+    13: 48.0,
+    14: 62.0,
+    15: 74.0,
+    16: 70.0,
+    17: 55.0,
+    18: 35.0,
+    19: 18.0,
+    20: 12.0,
+    21: 8.0,
+    22: 5.0,
+    23: 4.0,
 }
 
 # Day-of-week multiplier (0=Monday, 6=Sunday)
 _DAY_MULTIPLIER: tuple[float, ...] = (
-    1.0,   # Monday
+    1.0,  # Monday
     0.95,  # Tuesday
     1.05,  # Wednesday
-    1.0,   # Thursday
+    1.0,  # Thursday
     0.90,  # Friday
     0.35,  # Saturday
     0.20,  # Sunday
@@ -103,7 +118,7 @@ def generate_synthetic_training_data(
     rows_per_zone = max(1, math.ceil(n_rows / n_zones))
 
     # Generate timestamps spanning _SPAN_DAYS at _INTERVAL_MINUTES intervals
-    start_dt = datetime(2026, 2, 23, 0, 0, 0, tzinfo=timezone.utc)
+    start_dt = datetime(2026, 2, 23, 0, 0, 0, tzinfo=UTC)
     total_intervals = (_SPAN_DAYS * 24 * 60) // _INTERVAL_MINUTES
 
     # If we need more rows per zone than available intervals, reduce interval
@@ -114,7 +129,6 @@ def generate_synthetic_training_data(
         interval_indices = (interval_indices * repeats)[:rows_per_zone]
     else:
         # Sample evenly spaced intervals
-        all_indices = np.arange(total_intervals)
         step = total_intervals / rows_per_zone
         interval_indices = [int(i * step) for i in range(rows_per_zone)]
 
@@ -139,18 +153,20 @@ def generate_synthetic_training_data(
             # Recompute pct from integer slots for consistency
             actual_pct = round((occupied_slots / total_slots) * 100, 1) if total_slots > 0 else 0.0
 
-            all_rows.append({
-                "timestamp_iso": dt.isoformat(),
-                "timestamp_unix": int(dt.timestamp()),
-                "lot_id": lot_id,
-                "zone_id": zone_id,
-                "occupied_slots": occupied_slots,
-                "total_slots": total_slots,
-                "occupancy_pct": actual_pct,
-                "avg_distance_cm": "",
-                "coverage_pct": 100.0,
-                "source_dataset": "synthetic",
-            })
+            all_rows.append(
+                {
+                    "timestamp_iso": dt.isoformat(),
+                    "timestamp_unix": int(dt.timestamp()),
+                    "lot_id": lot_id,
+                    "zone_id": zone_id,
+                    "occupied_slots": occupied_slots,
+                    "total_slots": total_slots,
+                    "occupancy_pct": actual_pct,
+                    "avg_distance_cm": "",
+                    "coverage_pct": 100.0,
+                    "source_dataset": "synthetic",
+                }
+            )
 
     # Sort by timestamp, then zone for deterministic ordering
     all_rows.sort(key=lambda r: (int(r["timestamp_unix"]), str(r["zone_id"])))

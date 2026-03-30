@@ -6,8 +6,6 @@ encodings, lag features, and rolling statistics grouped by zone.
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 import pandas as pd
 
@@ -64,9 +62,8 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     out["occupancy_pct"] = pd.to_numeric(out["occupancy_pct"], errors="coerce")
     out["occupancy_pct_lag_1"] = out.groupby("zone_id")["occupancy_pct"].shift(1)
     out["occupancy_pct_lag_2"] = out.groupby("zone_id")["occupancy_pct"].shift(2)
-    out["occupancy_pct_rolling_mean_4"] = (
-        out.groupby("zone_id")["occupancy_pct"]
-        .transform(lambda s: s.shift(1).rolling(window=_MIN_HISTORY_ROWS, min_periods=_MIN_HISTORY_ROWS).mean())
+    out["occupancy_pct_rolling_mean_4"] = out.groupby("zone_id")["occupancy_pct"].transform(
+        lambda s: s.shift(1).rolling(window=_MIN_HISTORY_ROWS, min_periods=_MIN_HISTORY_ROWS).mean()
     )
 
     out["is_klcc_source"] = (out["source_dataset"] == "klcc").astype(int)

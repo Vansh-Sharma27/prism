@@ -1,6 +1,5 @@
 """Model exports for convenient imports in routes/services."""
 
-from app.models.user import User
 from app.models.parking import (
     OccupancyLog,
     ParkingEvent,
@@ -9,6 +8,7 @@ from app.models.parking import (
     SensorReading,
     Zone,
 )
+from app.models.user import User
 
 __all__ = [
     "User",

@@ -10,7 +10,6 @@ from uuid import uuid4
 import pytest
 import redis
 
-
 ROOT = Path(__file__).resolve().parents[1]
 COMPOSE_FILE = ROOT / "docker-compose.realtime.yml"
 

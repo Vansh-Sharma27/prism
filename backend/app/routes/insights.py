@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -18,6 +18,9 @@ from app.responses import error_response
 from app.services.notifications import get_notification_broker
 
 insights_bp = Blueprint("insights", __name__)
+
+_LOT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,50}$")
+_DESTINATION_RE = re.compile(r"^[A-Za-z0-9 _./-]{1,100}$")
 
 VALID_DAYS = {
     "monday",
@@ -65,22 +68,30 @@ def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
     time_label = request.args.get("time", "10:00").strip()
 
     if day not in VALID_DAYS:
-        return None, error_response(
-            "Invalid day. Use monday-sunday.",
-            400,
-            code="validation_error",
-        ), None
+        return (
+            None,
+            error_response(
+                "Invalid day. Use monday-sunday.",
+                400,
+                code="validation_error",
+            ),
+            None,
+        )
 
     try:
         hour = int(time_label.split(":")[0])
         if hour < 0 or hour > 23:
             raise ValueError("hour out of range")
-    except Exception:
-        return None, error_response(
-            "Invalid time. Use HH:MM in 24-hour format.",
-            400,
-            code="validation_error",
-        ), None
+    except (ValueError, IndexError):
+        return (
+            None,
+            error_response(
+                "Invalid time. Use HH:MM in 24-hour format.",
+                400,
+                code="validation_error",
+            ),
+            None,
+        )
 
     return day, time_label, hour
 
@@ -90,26 +101,49 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
     if lot is None:
         return None, []
 
+    # Single aggregated query replaces 2N individual COUNT queries
+    rows = (
+        db.session.query(
+            Zone.id,
+            Zone.name,
+            func.count(ParkingSlot.id).label("total_slots"),
+            func.coalesce(
+                func.sum(case((ParkingSlot.is_occupied == True, 1), else_=0)),  # noqa: E712
+                0,
+            ).label("occupied_slots"),
+        )
+        .outerjoin(ParkingSlot, ParkingSlot.zone_id == Zone.id)
+        .filter(Zone.lot_id == lot_id)
+        .group_by(Zone.id, Zone.name)
+        .order_by(Zone.name.asc())
+        .all()
+    )
+
+    # Fetch walk_times separately (JSON column cannot be used in GROUP BY on PostgreSQL)
+    zone_walk_times = {z.id: z.walk_times or {} for z in Zone.query.filter_by(lot_id=lot_id).all()}
+
     zone_rows: list[dict[str, Any]] = []
-    for zone in lot.zones.order_by(Zone.name.asc()).all():
-        total_slots = zone.slots.count()
-        occupied_slots = zone.slots.filter_by(is_occupied=True).count()
-        current_pct = round((occupied_slots / total_slots) * 100, 1) if total_slots else 0.0
+    for zone_id, name, total_slots, occupied_slots in rows:
+        total = int(total_slots)
+        occupied = int(occupied_slots)
+        current_pct = round((occupied / total) * 100, 1) if total else 0.0
         zone_rows.append(
             {
-                "zone_id": zone.id,
-                "name": zone.name,
-                "total_slots": total_slots,
-                "occupied_slots": occupied_slots,
+                "zone_id": zone_id,
+                "name": name,
+                "total_slots": total,
+                "occupied_slots": occupied,
                 "current_occupancy_pct": current_pct,
-                "walk_times": zone.walk_times or {},
+                "walk_times": zone_walk_times.get(zone_id, {}),
             }
         )
 
     return lot, zone_rows
 
 
-def _prediction_rows(zone_rows: list[dict[str, Any]], day: str, hour: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _prediction_rows(
+    zone_rows: list[dict[str, Any]], day: str, hour: int
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Generate predictions using ML model if available, otherwise heuristic fallback.
 
     Returns (predictions_list, model_metadata_dict).
@@ -147,7 +181,10 @@ def _zone_previous_occupancy_pct(zone_id: str) -> float | None:
 
 
 def _ml_prediction_rows(
-    service: Any, zone_rows: list[dict[str, Any]], day: str, hour: int,
+    service: Any,
+    zone_rows: list[dict[str, Any]],
+    day: str,
+    hour: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
     """Produce predictions using the trained ML model.
 
@@ -194,7 +231,9 @@ def _ml_prediction_rows(
 
 
 def _heuristic_prediction_rows(
-    zone_rows: list[dict[str, Any]], day: str, hour: int,
+    zone_rows: list[dict[str, Any]],
+    day: str,
+    hour: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fallback heuristic predictions when ML model is unavailable."""
     predictions: list[dict[str, Any]] = []
@@ -239,10 +278,13 @@ def _format_sse(event_name: str, payload: dict[str, Any]) -> str:
 @jwt_required()
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_prediction(lot_id: str):
-    """Return a mock prediction payload for a lot."""
+    """Return ML-backed or heuristic prediction payload for a lot."""
     _, auth_error = get_current_user_from_jwt()
     if auth_error:
         return auth_error
+
+    if not _LOT_ID_RE.fullmatch(lot_id):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
 
     parsed = _parse_day_and_time()
     if parsed[0] is None:
@@ -269,15 +311,25 @@ def get_prediction(lot_id: str):
 @jwt_required()
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_READ_HEAVY", "120 per minute"))
 def get_recommendation(lot_id: str):
-    """Return a mock zone recommendation for a destination."""
-    _, auth_error = get_current_user_from_jwt()
+    """Return ML-ranked zone recommendation with anti-herding."""
+    user, auth_error = get_current_user_from_jwt()
     if auth_error:
         return auth_error
 
+    if not _LOT_ID_RE.fullmatch(lot_id):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
+
     destination = request.args.get("destination", "").strip()
-    if not destination:
+    if not destination or len(destination) > 100:
         return error_response(
-            "destination query parameter is required",
+            "destination query parameter is required (max 100 characters)",
+            400,
+            code="validation_error",
+        )
+
+    if not _DESTINATION_RE.fullmatch(destination):
+        return error_response(
+            "destination contains invalid characters",
             400,
             code="validation_error",
         )
@@ -291,34 +343,36 @@ def get_recommendation(lot_id: str):
     if lot is None:
         return error_response("Lot not found", 404)
 
-    predictions, _ = _prediction_rows(zone_rows, day=day, hour=hour)
+    predictions, model_meta = _prediction_rows(zone_rows, day=day, hour=hour)
 
-    ranked = []
-    destination_key = destination.lower()
-    for zone, prediction in zip(zone_rows, predictions):
-        walk_times = zone.get("walk_times", {})
-        walk_min = None
-        for key, value in walk_times.items():
-            if key.lower() == destination_key:
-                walk_min = value
-                break
-        if walk_min is None:
-            walk_min = 8
+    from app.services.allocation_service import AllocationService
 
-        score = round(prediction["predicted_occupancy_pct"] + (walk_min * 3), 2)
-        ranked.append(
-            {
-                "zone_id": prediction["zone_id"],
-                "name": prediction["name"],
-                "predicted_occupancy_pct": prediction["predicted_occupancy_pct"],
-                "trend": prediction["trend"],
-                "estimated_walk_minutes": walk_min,
-                "score": score,
-            }
-        )
+    allocation = AllocationService()
+    scored_zones = allocation.recommend(
+        lot_id=lot_id,
+        destination=destination,
+        zone_rows=zone_rows,
+        predictions=predictions,
+        user_id=user.id if user else None,
+    )
 
-    ranked.sort(key=lambda item: (item["score"], item["predicted_occupancy_pct"]))
-    recommendation = ranked[0] if ranked else None
+    def _zone_to_dict(z):
+        return {
+            "zone_id": z.zone_id,
+            "name": z.zone_name,
+            "predicted_occupancy_pct": z.predicted_occupancy_pct,
+            "trend": z.trend,
+            "estimated_walk_minutes": z.walk_minutes,
+            "availability_pct": z.availability_pct,
+            "vacant_slots": z.vacant_slots,
+            "total_slots": z.total_slots,
+            "score": z.final_score,
+            "herding_penalty": z.herding_penalty,
+            "reason": z.reason,
+        }
+
+    recommendation = _zone_to_dict(scored_zones[0]) if scored_zones else None
+    alternatives = [_zone_to_dict(z) for z in scored_zones[1:3]]
 
     return jsonify(
         {
@@ -326,12 +380,19 @@ def get_recommendation(lot_id: str):
             "lot_name": lot.name,
             "destination": destination,
             "recommended_zone": recommendation,
-            "alternatives": ranked[1:3],
+            "alternatives": alternatives,
             "predicted_for": {"day": day, "time": time_label},
             "engine": {
-                "status": "mock",
-                "note": "Rule-based recommendation for Day 8. ML ranking is planned for Phase 3.",
+                "status": "active",
+                "version": "allocation-v1",
+                "weights": {
+                    "availability": 0.40,
+                    "walk_distance": 0.35,
+                    "prediction": 0.25,
+                },
+                "anti_herding": True,
             },
+            "model": model_meta,
         }
     )
 
@@ -376,9 +437,7 @@ def get_admin_sensors():
         if last_seen and last_seen >= uptime_window_start:
             sensor_row["slots_seen_24h"] += 1
 
-        if last_seen and (
-            sensor_row["last_seen_at"] is None or last_seen > sensor_row["last_seen_at"]
-        ):
+        if last_seen and (sensor_row["last_seen_at"] is None or last_seen > sensor_row["last_seen_at"]):
             sensor_row["last_seen_at"] = last_seen
             sensor_row["last_distance_cm"] = slot.last_distance_cm
 
@@ -467,15 +526,22 @@ def get_admin_analytics():
         for row in daily_rows
     ]
 
-    events = ParkingEvent.query.filter(ParkingEvent.timestamp >= window_start).all()
-    hourly_counter: Counter[int] = Counter()
-    for event in events:
-        if event.timestamp:
-            hourly_counter[event.timestamp.hour] += 1
+    # Hourly event distribution via SQL aggregate (avoids loading all rows into memory)
+    hourly_rows = (
+        db.session.query(
+            func.extract("hour", ParkingEvent.timestamp).label("hour"),
+            func.count(ParkingEvent.id).label("cnt"),
+        )
+        .filter(ParkingEvent.timestamp >= window_start)
+        .filter(ParkingEvent.timestamp.isnot(None))
+        .group_by(func.extract("hour", ParkingEvent.timestamp))
+        .all()
+    )
+    hourly_counter: dict[int, int] = {int(row.hour): int(row.cnt) for row in hourly_rows}
 
     hourly_distribution = [{"hour": hour, "events": hourly_counter.get(hour, 0)} for hour in range(24)]
 
-    if events:
+    if hourly_counter:
         peak_hour = max(range(24), key=lambda hour: hourly_counter.get(hour, 0))
         peak_hour_summary = {
             "hour_utc": f"{peak_hour:02d}:00",
@@ -484,19 +550,39 @@ def get_admin_analytics():
     else:
         peak_hour_summary = {"hour_utc": None, "events": 0}
 
+    # Zone utilization: single aggregated query (replaces 2N COUNT queries + lazy lot load)
+    zone_util_rows = (
+        db.session.query(
+            Zone.id,
+            Zone.name,
+            Zone.lot_id,
+            ParkingLot.name.label("lot_name"),
+            func.count(ParkingSlot.id).label("total_slots"),
+            func.coalesce(
+                func.sum(case((ParkingSlot.is_occupied == True, 1), else_=0)),  # noqa: E712
+                0,
+            ).label("occupied_slots"),
+        )
+        .join(ParkingLot, ParkingLot.id == Zone.lot_id)
+        .outerjoin(ParkingSlot, ParkingSlot.zone_id == Zone.id)
+        .group_by(Zone.id, Zone.name, Zone.lot_id, ParkingLot.name)
+        .order_by(Zone.name.asc())
+        .all()
+    )
+
     zone_rows = []
-    for zone in Zone.query.order_by(Zone.name.asc()).all():
-        total_slots = zone.slots.count()
-        occupied_slots = zone.slots.filter_by(is_occupied=True).count()
+    for zone_id, zone_name, lot_id, lot_name, total_slots, occupied_slots in zone_util_rows:
+        total = int(total_slots)
+        occupied = int(occupied_slots)
         zone_rows.append(
             {
-                "zone_id": zone.id,
-                "zone_name": zone.name,
-                "lot_id": zone.lot_id,
-                "lot_name": zone.lot.name if zone.lot else None,
-                "occupied_slots": occupied_slots,
-                "total_slots": total_slots,
-                "utilization_pct": round((occupied_slots / total_slots) * 100, 1) if total_slots else 0.0,
+                "zone_id": zone_id,
+                "zone_name": zone_name,
+                "lot_id": lot_id,
+                "lot_name": lot_name,
+                "occupied_slots": occupied,
+                "total_slots": total,
+                "utilization_pct": round((occupied / total) * 100, 1) if total else 0.0,
             }
         )
 
@@ -525,10 +611,13 @@ def stream_notifications():
         return auth_error
 
     lot_filter = request.args.get("lot_id", "").strip() or None
+    if lot_filter and not _LOT_ID_RE.fullmatch(lot_filter):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
     heartbeat_interval = max(5, int(current_app.config.get("SSE_HEARTBEAT_INTERVAL_SECONDS", 15)))
+    max_duration_seconds = max(60, int(current_app.config.get("SSE_MAX_DURATION_SECONDS", 1800)))
 
     subscription = get_notification_broker().subscribe()
-    connected_at = datetime.utcnow().isoformat()
+    connected_at = datetime.utcnow()
 
     def generate_events():
         try:
@@ -536,11 +625,25 @@ def stream_notifications():
                 "connected",
                 {
                     "type": "connected",
-                    "connected_at": connected_at,
+                    "connected_at": connected_at.isoformat(),
                     "user_id": user.id,
+                    "max_duration_seconds": max_duration_seconds,
                 },
             )
             while True:
+                # P2 fix: enforce max-duration cap to prevent indefinite connections
+                elapsed = (datetime.utcnow() - connected_at).total_seconds()
+                if elapsed >= max_duration_seconds:
+                    yield _format_sse(
+                        "reconnect",
+                        {
+                            "type": "reconnect",
+                            "reason": "max_duration_exceeded",
+                            "elapsed_seconds": int(elapsed),
+                        },
+                    )
+                    break
+
                 event = subscription.get(timeout=heartbeat_interval)
                 if event is None:
                     yield _format_sse("ping", {"type": "ping", "timestamp": datetime.utcnow().isoformat()})

@@ -1,6 +1,7 @@
 """
 Database models for PRISM parking system.
 """
+
 from datetime import datetime
 
 from app import db
@@ -8,8 +9,9 @@ from app import db
 
 class ParkingLot(db.Model):
     """Represents a parking lot/zone."""
-    __tablename__ = 'parking_lots'
-    
+
+    __tablename__ = "parking_lots"
+
     id = db.Column(db.String(50), primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     location = db.Column(db.String(200))
@@ -18,140 +20,156 @@ class ParkingLot(db.Model):
     longitude = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
-    slots = db.relationship('ParkingSlot', backref='lot', lazy='dynamic')
-    zones = db.relationship('Zone', backref='lot', lazy='dynamic')
-    
+    slots = db.relationship("ParkingSlot", backref="lot", lazy="dynamic")
+    zones = db.relationship("Zone", backref="lot", lazy="dynamic")
+
     def to_dict(self):
         return {
-            'id': self.id,
-            'name': self.name,
-            'location': self.location,
-            'total_slots': self.total_slots,
-            'available_slots': self.slots.filter_by(is_occupied=False).count(),
-            'latitude': self.latitude,
-            'longitude': self.longitude
+            "id": self.id,
+            "name": self.name,
+            "location": self.location,
+            "total_slots": self.total_slots,
+            "available_slots": self.slots.filter_by(is_occupied=False).count(),
+            "latitude": self.latitude,
+            "longitude": self.longitude,
         }
 
 
 class ParkingSlot(db.Model):
     """Represents an individual parking slot."""
-    __tablename__ = 'parking_slots'
-    
+
+    __tablename__ = "parking_slots"
+
     id = db.Column(db.String(50), primary_key=True)
-    lot_id = db.Column(db.String(50), db.ForeignKey('parking_lots.id'), nullable=False)
-    zone_id = db.Column(db.String(50), db.ForeignKey('zones.id'), nullable=True)
+    lot_id = db.Column(db.String(50), db.ForeignKey("parking_lots.id"), nullable=False)
+    zone_id = db.Column(db.String(50), db.ForeignKey("zones.id"), nullable=True)
     slot_number = db.Column(db.Integer, nullable=False)
     is_occupied = db.Column(db.Boolean, default=False)
     is_reserved = db.Column(db.Boolean, default=False)
-    slot_type = db.Column(db.String(20), default='standard')  # standard, handicapped, ev
+    slot_type = db.Column(db.String(20), default="standard")  # standard, handicapped, ev
     sensor_id = db.Column(db.String(50))
     last_status_change = db.Column(db.DateTime, default=datetime.utcnow)
     last_telemetry_at = db.Column(db.DateTime)
     last_distance_cm = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     # Relationships
-    events = db.relationship('ParkingEvent', backref='slot', lazy='dynamic')
-    occupancy_logs = db.relationship('OccupancyLog', backref='slot', lazy='dynamic')
-    
+    events = db.relationship("ParkingEvent", backref="slot", lazy="dynamic")
+    occupancy_logs = db.relationship("OccupancyLog", backref="slot", lazy="dynamic")
+
     def to_dict(self):
-        latest_log = self.occupancy_logs.order_by(OccupancyLog.timestamp.desc()).first()
         latest_distance = self.last_distance_cm
         latest_seen = self.last_telemetry_at
 
-        if latest_log is not None:
-            if latest_distance is None:
-                latest_distance = latest_log.distance_cm
-            if latest_seen is None:
-                latest_seen = latest_log.timestamp
-
         return {
-            'id': self.id,
-            'lot_id': self.lot_id,
-            'zone_id': self.zone_id,
-            'zone_name': self.zone.name if self.zone else None,
-            'slot_number': self.slot_number,
-            'is_occupied': self.is_occupied,
-            'is_reserved': self.is_reserved,
-            'slot_type': self.slot_type,
-            'sensor_id': self.sensor_id,
-            'latest_distance_cm': latest_distance,
-            'last_reading_at': latest_seen.isoformat() if latest_seen else None,
-            'last_status_change': self.last_status_change.isoformat() if self.last_status_change else None
+            "id": self.id,
+            "lot_id": self.lot_id,
+            "zone_id": self.zone_id,
+            "zone_name": self.zone.name if self.zone else None,
+            "slot_number": self.slot_number,
+            "is_occupied": self.is_occupied,
+            "is_reserved": self.is_reserved,
+            "slot_type": self.slot_type,
+            "sensor_id": self.sensor_id,
+            "latest_distance_cm": latest_distance,
+            "last_reading_at": latest_seen.isoformat() if latest_seen else None,
+            "last_status_change": self.last_status_change.isoformat() if self.last_status_change else None,
         }
 
 
 class Zone(db.Model):
     """Logical grouping of slots inside a lot."""
-    __tablename__ = 'zones'
+
+    __tablename__ = "zones"
 
     id = db.Column(db.String(50), primary_key=True)
-    lot_id = db.Column(db.String(50), db.ForeignKey('parking_lots.id'), nullable=False)
+    lot_id = db.Column(db.String(50), db.ForeignKey("parking_lots.id"), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     walk_times = db.Column(db.JSON, nullable=False, default=dict)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    slots = db.relationship('ParkingSlot', backref='zone', lazy='dynamic')
+    slots = db.relationship("ParkingSlot", backref="zone", lazy="dynamic")
 
-    __table_args__ = (
-        db.UniqueConstraint('lot_id', 'name', name='uq_zone_lot_name'),
-    )
+    __table_args__ = (db.UniqueConstraint("lot_id", "name", name="uq_zone_lot_name"),)
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'lot_id': self.lot_id,
-            'name': self.name,
-            'walk_times': self.walk_times,
+            "id": self.id,
+            "lot_id": self.lot_id,
+            "name": self.name,
+            "walk_times": self.walk_times,
         }
 
 
 class ParkingEvent(db.Model):
     """Records parking events (entry/exit)."""
-    __tablename__ = 'parking_events'
-    
+
+    __tablename__ = "parking_events"
+
     id = db.Column(db.Integer, primary_key=True)
-    slot_id = db.Column(db.String(50), db.ForeignKey('parking_slots.id'), nullable=False)
+    slot_id = db.Column(db.String(50), db.ForeignKey("parking_slots.id"), nullable=False)
     event_type = db.Column(db.String(10), nullable=False)  # 'entry' or 'exit'
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     sensor_distance_cm = db.Column(db.Float)
-    
+
+    __table_args__ = (
+        db.Index("idx_parking_events_slot_time", "slot_id", "timestamp"),
+        db.Index("idx_parking_events_timestamp", "timestamp"),
+    )
+
     def to_dict(self):
         return {
-            'id': self.id,
-            'slot_id': self.slot_id,
-            'event_type': self.event_type,
-            'timestamp': self.timestamp.isoformat()
+            "id": self.id,
+            "slot_id": self.slot_id,
+            "event_type": self.event_type,
+            "timestamp": self.timestamp.isoformat(),
         }
 
 
 class SensorReading(db.Model):
     """Raw sensor readings for ML training."""
-    __tablename__ = 'sensor_readings'
-    
+
+    __tablename__ = "sensor_readings"
+
     id = db.Column(db.Integer, primary_key=True)
-    slot_id = db.Column(db.String(50), db.ForeignKey('parking_slots.id'), nullable=False)
+    slot_id = db.Column(db.String(50), db.ForeignKey("parking_slots.id"), nullable=False)
     distance_cm = db.Column(db.Float, nullable=False)
     is_occupied = db.Column(db.Boolean, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    __table_args__ = (
-        db.Index('idx_sensor_readings_slot_time', 'slot_id', 'timestamp'),
-    )
+
+    __table_args__ = (db.Index("idx_sensor_readings_slot_time", "slot_id", "timestamp"),)
 
 
 class OccupancyLog(db.Model):
     """Time-series state changes used for analytics and ML features."""
-    __tablename__ = 'occupancy_logs'
+
+    __tablename__ = "occupancy_logs"
 
     id = db.Column(db.Integer, primary_key=True)
-    slot_id = db.Column(db.String(50), db.ForeignKey('parking_slots.id'), nullable=False)
+    slot_id = db.Column(db.String(50), db.ForeignKey("parking_slots.id"), nullable=False)
     status = db.Column(db.String(20), nullable=False)  # occupied or vacant
     distance_cm = db.Column(db.Float)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+    __table_args__ = (db.Index("idx_occupancy_logs_slot_time", "slot_id", "timestamp"),)
+
+
+class Recommendation(db.Model):
+    """Tracks zone recommendations for anti-herding analytics."""
+
+    __tablename__ = "recommendations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    lot_id = db.Column(db.String(50), db.ForeignKey("parking_lots.id"), nullable=False)
+    zone_id = db.Column(db.String(50), db.ForeignKey("zones.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    destination = db.Column(db.String(100), nullable=False)
+    score = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
     __table_args__ = (
-        db.Index('idx_occupancy_logs_slot_time', 'slot_id', 'timestamp'),
+        db.Index("idx_recommendations_zone_created", "zone_id", "created_at"),
+        db.Index("idx_recommendations_lot_created", "lot_id", "created_at"),
     )

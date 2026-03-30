@@ -110,7 +110,7 @@ def test_recommendation_requires_destination_query_param(client):
 
     response = client.get("/api/v1/lots/lot-a/recommend", headers=headers)
     assert response.status_code == 400
-    assert response.get_json()["error"] == "destination query parameter is required"
+    assert "destination" in response.get_json()["error"].lower()
 
 
 def test_recommendation_returns_mock_ranked_zone(client):
@@ -126,7 +126,8 @@ def test_recommendation_returns_mock_ranked_zone(client):
     payload = response.get_json()
     assert payload["destination"] == "Library"
     assert payload["recommended_zone"] is not None
-    assert payload["engine"]["status"] == "mock"
+    assert payload["engine"]["status"] == "active"
+    assert payload["engine"]["anti_herding"] is True
 
 
 def test_admin_endpoints_reject_non_admin_user(client):

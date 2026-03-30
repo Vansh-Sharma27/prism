@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
-
+from typing import Any
 
 CANONICAL_TRAINING_COLUMNS: tuple[str, ...] = (
     "timestamp_iso",
@@ -29,7 +29,7 @@ def _parse_iso_to_epoch(iso_str: str) -> int:
     normalized = iso_str.strip().replace("Z", "+00:00")
     dt = datetime.fromisoformat(normalized)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return int(dt.timestamp())
 
 
@@ -38,8 +38,8 @@ def _normalize_iso(iso_str: str) -> str:
     normalized = iso_str.strip().replace("Z", "+00:00")
     dt = datetime.fromisoformat(normalized)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).isoformat()
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).isoformat()
 
 
 def normalize_external_training_rows(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:

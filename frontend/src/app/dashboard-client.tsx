@@ -61,7 +61,7 @@ export function DashboardClient() {
 
           {error && (
             <PollingNotice
-              message={`API poll warning: ${error}`}
+              message="Data refresh failed. Check your connection or contact support."
               actions={[{ label: "Retry", onClick: retry }]}
             />
           )}

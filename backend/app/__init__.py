@@ -1,6 +1,7 @@
 """
 PRISM Backend Application Factory
 """
+
 import json
 import logging
 import os
@@ -40,7 +41,7 @@ def _rate_limit_key() -> str:
     return get_remote_address() or "unknown"
 
 
-limiter = Limiter(key_func=_rate_limit_key, default_limits=[])
+limiter = Limiter(key_func=_rate_limit_key, default_limits=["200 per minute"])
 
 
 def _env_int(name: str, default: int) -> int:
@@ -114,12 +115,9 @@ def create_app(config_name=None):
         "PRISM_RATE_LIMIT_STORAGE_URI",
         app.config["REDIS_URL"],
     )
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
-        hours=_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24)
-    )
-    app.config["ALLOW_PUBLIC_READS"] = (
-        os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
-    )
+    jwt_expiry_hours = max(1, min(_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24), 168))  # Cap at 7 days
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=jwt_expiry_hours)
+    app.config["ALLOW_PUBLIC_READS"] = os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
     app.config["ALLOW_PRIVILEGED_SELF_REGISTER"] = (
         os.getenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false").lower() == "true"
     )
@@ -132,12 +130,12 @@ def create_app(config_name=None):
         "PRISM_RATE_LIMIT_CAMERA_UPLOAD",
         "120 per minute",
     )
-    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int(
-        "PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15
-    )
-    app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int(
-        "PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024
-    )
+    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int("PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15)
+    app.config["SSE_MAX_DURATION_SECONDS"] = _env_int("PRISM_SSE_MAX_DURATION_SECONDS", 1800)
+    app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int("PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024)
+    # MAX_CONTENT_LENGTH set to a generous global limit; camera-specific limit
+    # is enforced in the camera route via CAMERA_UPLOAD_MAX_BYTES.
+    app.config["MAX_CONTENT_LENGTH"] = _env_int("PRISM_MAX_CONTENT_LENGTH", 10 * 1024 * 1024)
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
     app.config["CAMERA_UPLOAD_TOKEN"] = os.getenv("PRISM_CAMERA_UPLOAD_TOKEN", "")
@@ -158,10 +156,23 @@ def create_app(config_name=None):
     jwt.init_app(app)
     limiter.init_app(app)
 
+    # JWT token blocklist (in-memory; cleared on restart — sufficient for
+    # single-process deployments; upgrade to Redis for multi-worker setups)
+    _jwt_blocklist: set[str] = set()
+    app.extensions["jwt_blocklist"] = _jwt_blocklist
+
+    @jwt.token_in_blocklist_loader
+    def _check_token_revoked(_jwt_header, jwt_payload):
+        return jwt_payload["jti"] in _jwt_blocklist
+
+    from app.services.camera_classification_service import CameraClassificationService
     from app.services.notifications import configure_notification_broker
     from app.services.prediction_service import PredictionService
 
     configure_notification_broker(app)
+
+    # Initialize camera classification service (singleton)
+    app.extensions["camera_classifier"] = CameraClassificationService()
 
     # Initialize ML prediction service (gracefully degrades if no model file)
     ml_model_path = os.getenv("ML_MODEL_PATH", "").strip() or None
@@ -211,6 +222,18 @@ def create_app(config_name=None):
         if request_id:
             response.headers["X-Request-ID"] = request_id
 
+        # Security response headers (M6 fix)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        )
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if os.getenv("PRISM_ENABLE_HSTS", "false").lower() == "true":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
         if _is_api_path(request.path):
             started_at = getattr(g, "request_started_at", None)
             duration_ms = None
@@ -258,13 +281,13 @@ def create_app(config_name=None):
         return error_response("Internal server error", 500)
 
     # Register blueprints
+    from app import models  # noqa: F401 - ensure model metadata is loaded
     from app.routes.auth import auth_bp
     from app.routes.camera import camera_bp
     from app.routes.health import health_bp
     from app.routes.insights import insights_bp
     from app.routes.lots import lots_bp
     from app.routes.slots import slots_bp
-    from app import models  # noqa: F401 - ensure model metadata is loaded
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
