@@ -429,18 +429,18 @@ class MQTTService:
                             timestamp=received_at,
                         )
                     )
-                    notification_events.append(
-                        build_slot_change_event(
-                            slot_id=slot.id,
-                            lot_id=slot.lot_id,
-                            zone_id=slot.zone_id,
-                            is_occupied=slot.is_occupied,
-                            event_type=event_type,
-                            source="heartbeat",
-                            distance_cm=distance,
-                        )
+                    notification_event = build_slot_change_event(
+                        slot_id=slot.id,
+                        lot_id=slot.lot_id,
+                        zone_id=slot.zone_id,
+                        is_occupied=slot.is_occupied,
+                        event_type=event_type,
+                        source="heartbeat",
+                        distance_cm=distance,
                     )
                     nested.commit()
+                    # Queue notification only after successful savepoint commit
+                    notification_events.append(notification_event)
                 except Exception:
                     if nested is not None:
                         nested.rollback()
