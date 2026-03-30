@@ -114,9 +114,8 @@ def create_app(config_name=None):
         "PRISM_RATE_LIMIT_STORAGE_URI",
         app.config["REDIS_URL"],
     )
-    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(
-        hours=_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24)
-    )
+    jwt_expiry_hours = max(1, min(_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24), 168))  # Cap at 7 days
+    app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=jwt_expiry_hours)
     app.config["ALLOW_PUBLIC_READS"] = (
         os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
     )

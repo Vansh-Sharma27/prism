@@ -39,7 +39,8 @@ def _verify_and_load_model(model_path: Path) -> Any | None:
     if os.getenv("ML_SKIP_INTEGRITY_CHECK", "false").lower() == "true":
         logger.warning("PredictionService: ML_SKIP_INTEGRITY_CHECK is set — bypassing integrity check")
         try:
-            loaded = joblib.load(model_path)
+            model_bytes = model_path.read_bytes()
+            loaded = joblib.load(io.BytesIO(model_bytes))
         except Exception:
             logger.exception("PredictionService: failed to load model from %s", model_path)
             return None

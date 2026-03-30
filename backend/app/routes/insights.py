@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -17,6 +18,9 @@ from app.responses import error_response
 from app.services.notifications import get_notification_broker
 
 insights_bp = Blueprint("insights", __name__)
+
+_LOT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,50}$")
+_DESTINATION_RE = re.compile(r"^[A-Za-z0-9 _./-]{1,100}$")
 
 VALID_DAYS = {
     "monday",
@@ -269,6 +273,9 @@ def get_prediction(lot_id: str):
     if auth_error:
         return auth_error
 
+    if not _LOT_ID_RE.fullmatch(lot_id):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
+
     parsed = _parse_day_and_time()
     if parsed[0] is None:
         return parsed[1]
@@ -299,10 +306,20 @@ def get_recommendation(lot_id: str):
     if auth_error:
         return auth_error
 
+    if not _LOT_ID_RE.fullmatch(lot_id):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
+
     destination = request.args.get("destination", "").strip()
     if not destination or len(destination) > 100:
         return error_response(
             "destination query parameter is required (max 100 characters)",
+            400,
+            code="validation_error",
+        )
+
+    if not _DESTINATION_RE.fullmatch(destination):
+        return error_response(
+            "destination contains invalid characters",
             400,
             code="validation_error",
         )

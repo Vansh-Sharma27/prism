@@ -109,7 +109,11 @@ def upload_camera_image():
     filename = f"{safe_camera_id}_{timestamp}_{secrets.token_hex(3)}{extension}"
 
     upload_dir = _resolve_upload_dir()
-    file_path = upload_dir / filename
+    file_path = (upload_dir / filename).resolve()
+
+    # Ensure resolved path stays within the upload directory (symlink/traversal guard)
+    if not file_path.is_relative_to(upload_dir.resolve()):
+        return error_response("Invalid upload path", 400, code="validation_error")
 
     try:
         file_path.write_bytes(payload)
