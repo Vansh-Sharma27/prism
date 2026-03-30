@@ -171,10 +171,14 @@ class TestMQTTSlotUpdateLocking:
         service = MQTTService(app=app_with_db)
 
         # Process a slot update
-        service._handle_slot_update("lot-a", "slot-1", {
-            "distance_cm": 7.5,
-            "occupied": True,
-        })
+        service._handle_slot_update(
+            "lot-a",
+            "slot-1",
+            {
+                "distance_cm": 7.5,
+                "occupied": True,
+            },
+        )
 
         with app_with_db.app_context():
             slot = db.session.get(ParkingSlot, "lot-a-slot-1")
@@ -193,10 +197,14 @@ class TestMQTTSlotUpdateLocking:
             db.session.commit()
 
         # Trigger occupancy change
-        service._handle_slot_update("lot-a", "slot-1", {
-            "distance_cm": 7.5,
-            "occupied": True,
-        })
+        service._handle_slot_update(
+            "lot-a",
+            "slot-1",
+            {
+                "distance_cm": 7.5,
+                "occupied": True,
+            },
+        )
 
         with app_with_db.app_context():
             events = ParkingEvent.query.filter_by(

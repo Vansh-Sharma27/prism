@@ -93,9 +93,7 @@ def train_occupancy_model(
     y = df_features["occupancy_pct"].values.astype(np.float64)
 
     # Time-series aware split: last 20% for testing (no shuffling)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, shuffle=False
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
     # Train Random Forest
     model = RandomForestRegressor(
@@ -113,8 +111,7 @@ def train_occupancy_model(
 
     # Feature importances
     feature_importances = {
-        name: round(float(imp), 6)
-        for name, imp in zip(FEATURE_COLUMNS, model.feature_importances_, strict=False)
+        name: round(float(imp), 6) for name, imp in zip(FEATURE_COLUMNS, model.feature_importances_, strict=False)
     }
 
     # Save model
@@ -148,9 +145,7 @@ if __name__ == "__main__":
     print(f"Test set:  {metrics['n_test']} rows")
     print()
     print("Feature Importances:")
-    sorted_fi = sorted(
-        metrics["feature_importances"].items(), key=lambda x: x[1], reverse=True
-    )
+    sorted_fi = sorted(metrics["feature_importances"].items(), key=lambda x: x[1], reverse=True)
     for name, importance in sorted_fi:
         print(f"  {name:35s} {importance:.4f}")
     print()

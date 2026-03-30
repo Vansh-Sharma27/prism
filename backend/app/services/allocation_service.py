@@ -83,24 +83,18 @@ class AllocationService:
 
         # Batch-fetch recent recommendation counts per zone (eliminates N+1)
         zone_ids = [z["zone_id"] for z in zone_rows]
-        herding_counts = _batch_count_recent_recommendations(
-            zone_ids, minutes=HERDING_WINDOW_MINUTES
-        )
+        herding_counts = _batch_count_recent_recommendations(zone_ids, minutes=HERDING_WINDOW_MINUTES)
 
         scores: list[ZoneScore] = []
 
-        for zone_data, pred in zip(zone_rows, predictions, strict=False):
+        for zone_data, pred in zip(zone_rows, predictions, strict=True):
             zone_id = zone_data["zone_id"]
             total_slots = zone_data["total_slots"]
             occupied_slots = zone_data["occupied_slots"]
             vacant_slots = total_slots - occupied_slots
 
             # 1. Availability score (0-100): higher is better
-            availability_pct = (
-                round((vacant_slots / total_slots) * 100, 1)
-                if total_slots > 0
-                else 0.0
-            )
+            availability_pct = round((vacant_slots / total_slots) * 100, 1) if total_slots > 0 else 0.0
 
             # 2. Walk-distance score (0-100): lower walk time -> higher score
             walk_times = zone_data.get("walk_times", {})
@@ -178,9 +172,7 @@ def _resolve_walk_time(walk_times: dict[str, Any], destination_key: str) -> floa
     return 8.0
 
 
-def _batch_count_recent_recommendations(
-    zone_ids: list[str], minutes: int
-) -> dict[str, int]:
+def _batch_count_recent_recommendations(zone_ids: list[str], minutes: int) -> dict[str, int]:
     """Count recent recommendations for multiple zones in a single query."""
     if not zone_ids:
         return {}
@@ -225,9 +217,7 @@ def _log_recommendation(
         db.session.commit()
     except Exception:
         db.session.rollback()
-        logger.exception(
-            "Failed to log recommendation | lot_id=%s zone_id=%s", lot_id, zone_id
-        )
+        logger.exception("Failed to log recommendation | lot_id=%s zone_id=%s", lot_id, zone_id)
         return
 
     # Prune old recommendations to prevent unbounded table growth (H3 fix)
@@ -242,11 +232,7 @@ def _log_recommendation(
         )
         if stale_ids:
             id_list = [row[0] for row in stale_ids]
-            deleted = (
-                Recommendation.query
-                .filter(Recommendation.id.in_(id_list))
-                .delete(synchronize_session=False)
-            )
+            deleted = Recommendation.query.filter(Recommendation.id.in_(id_list)).delete(synchronize_session=False)
             db.session.commit()
             logger.info("Pruned %d old recommendations (older than %dh)", deleted, RETENTION_HOURS)
     except Exception:

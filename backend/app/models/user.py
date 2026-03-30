@@ -1,6 +1,7 @@
 """
 User and authentication models.
 """
+
 from datetime import datetime
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -10,6 +11,7 @@ from app import db
 
 class User(db.Model):
     """Application user for dashboard and APIs."""
+
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)

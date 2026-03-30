@@ -1,6 +1,7 @@
 """
 Authentication routes for user registration and login.
 """
+
 from flask import Blueprint, current_app, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
@@ -10,10 +11,10 @@ from app.models.user import User
 from app.responses import error_response
 from app.schemas import user_login_schema, user_register_schema, user_response_schema
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route('/register', methods=['POST'])
+@auth_bp.route("/register", methods=["POST"])
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_AUTH_REGISTER", "5 per minute"))
 def register():
     """Register a new user."""
@@ -22,31 +23,28 @@ def register():
     except ValidationError as err:
         return error_response("Validation failed", 400, code="validation_error", details=err.messages)
 
-    email = data['email'].strip().lower()
-    requested_role = data.get('role', 'student')
-    allow_privileged = current_app.config.get('ALLOW_PRIVILEGED_SELF_REGISTER', False)
+    email = data["email"].strip().lower()
+    requested_role = data.get("role", "student")
+    allow_privileged = current_app.config.get("ALLOW_PRIVILEGED_SELF_REGISTER", False)
 
-    if requested_role != 'student' and not allow_privileged:
+    if requested_role != "student" and not allow_privileged:
         return error_response("Self-registration only supports student role", 403, code="forbidden")
 
-    role = requested_role if allow_privileged else 'student'
+    role = requested_role if allow_privileged else "student"
 
     if User.query.filter_by(email=email).first():
         return error_response("Email already registered", 409, code="conflict")
 
     user = User(email=email, role=role)
-    user.set_password(data['password'])
+    user.set_password(data["password"])
 
     db.session.add(user)
     db.session.commit()
 
-    return jsonify({
-        "message": "User registered",
-        "user": user_response_schema.dump(user)
-    }), 201
+    return jsonify({"message": "User registered", "user": user_response_schema.dump(user)}), 201
 
 
-@auth_bp.route('/login', methods=['POST'])
+@auth_bp.route("/login", methods=["POST"])
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_AUTH_LOGIN", "10 per minute"))
 def login():
     """Authenticate user and return JWT token."""
@@ -58,18 +56,15 @@ def login():
     email = data["email"].strip().lower()
     user = User.query.filter_by(email=email).first()
 
-    if not user or not user.check_password(data['password']):
+    if not user or not user.check_password(data["password"]):
         return error_response("Invalid email or password", 401, code="invalid_credentials")
 
     access_token = create_access_token(identity=str(user.id))
 
-    return jsonify({
-        "access_token": access_token,
-        "user": user_response_schema.dump(user)
-    }), 200
+    return jsonify({"access_token": access_token, "user": user_response_schema.dump(user)}), 200
 
 
-@auth_bp.route('/me', methods=['GET'])
+@auth_bp.route("/me", methods=["GET"])
 @jwt_required()
 def get_current_user():
     """Get current authenticated user."""

@@ -70,9 +70,7 @@ class TestSyntheticDataRange:
         for i, row in enumerate(rows):
             occupied = int(row["occupied_slots"])
             total = int(row["total_slots"])
-            assert 0 <= occupied <= total, (
-                f"Row {i}: occupied={occupied} > total={total}"
-            )
+            assert 0 <= occupied <= total, f"Row {i}: occupied={occupied} > total={total}"
 
 
 class TestSyntheticDataCoverage:

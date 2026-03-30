@@ -41,9 +41,7 @@ class CameraClassificationService:
 
     def __init__(self, backend: str = "brightness_heuristic") -> None:
         self._backend = backend
-        logger.info(
-            "CameraClassificationService initialized | backend=%s", backend
-        )
+        logger.info("CameraClassificationService initialized | backend=%s", backend)
 
     @property
     def backend_name(self) -> str:

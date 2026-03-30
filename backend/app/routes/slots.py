@@ -262,11 +262,7 @@ def batch_update_slot_status():
             )
             continue
 
-        update_payload = {
-            key: item[key]
-            for key in ("is_occupied", "is_reserved", "distance_cm")
-            if key in item
-        }
+        update_payload = {key: item[key] for key in ("is_occupied", "is_reserved", "distance_cm") if key in item}
 
         if not update_payload:
             failed += 1
@@ -344,12 +340,7 @@ def get_slot_events(slot_id):
 
     requested_limit = request.args.get("limit", 50, type=int)
     limit = max(1, min(requested_limit, MAX_EVENTS_LIMIT))
-    events = (
-        ParkingEvent.query.filter_by(slot_id=slot_id)
-        .order_by(ParkingEvent.timestamp.desc())
-        .limit(limit)
-        .all()
-    )
+    events = ParkingEvent.query.filter_by(slot_id=slot_id).order_by(ParkingEvent.timestamp.desc()).limit(limit).all()
     return jsonify({"events": [event.to_dict() for event in events]})
 
 

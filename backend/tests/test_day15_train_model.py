@@ -37,9 +37,7 @@ class TestTrainModel:
             synthetic_rows=1500,
             seed=42,
         )
-        assert metrics["r2"] >= 0.85, (
-            f"R² = {metrics['r2']:.4f} is below the 0.85 threshold"
-        )
+        assert metrics["r2"] >= 0.85, f"R² = {metrics['r2']:.4f} is below the 0.85 threshold"
 
     def test_outputs_metrics_dict(self, tmp_path: Path):
         from app.ml.train_model import train_occupancy_model
@@ -52,9 +50,7 @@ class TestTrainModel:
             seed=42,
         )
         required_keys = {"r2", "mae", "n_train", "n_test", "feature_importances"}
-        assert required_keys.issubset(set(metrics.keys())), (
-            f"Missing keys: {required_keys - set(metrics.keys())}"
-        )
+        assert required_keys.issubset(set(metrics.keys())), f"Missing keys: {required_keys - set(metrics.keys())}"
         assert isinstance(metrics["r2"], float)
         assert isinstance(metrics["mae"], float)
         assert isinstance(metrics["n_train"], int)
@@ -97,9 +93,7 @@ class TestTrainModel:
             seed=42,
         )
         # MAE should be below 10 percentage points for a good model
-        assert metrics["mae"] < 10.0, (
-            f"MAE = {metrics['mae']:.2f}% is too high (expected < 10%)"
-        )
+        assert metrics["mae"] < 10.0, f"MAE = {metrics['mae']:.2f}% is too high (expected < 10%)"
 
     def test_feature_importances_match_feature_columns(self, tmp_path: Path):
         from app.ml.feature_engineering import FEATURE_COLUMNS

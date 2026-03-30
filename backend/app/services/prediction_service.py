@@ -180,17 +180,17 @@ class PredictionService:
         # Build feature array matching FEATURE_COLUMNS order exactly
         features = np.array(
             [
-                float(target_hour),                                          # hour_of_day
-                float(target_day_of_week),                                   # day_of_week
-                1.0 if target_day_of_week >= 5 else 0.0,                     # is_weekend
-                math.sin(2 * math.pi * target_hour / 24),                    # hour_sin
-                math.cos(2 * math.pi * target_hour / 24),                    # hour_cos
-                math.sin(2 * math.pi * target_day_of_week / 7),             # dow_sin
-                math.cos(2 * math.pi * target_day_of_week / 7),             # dow_cos
-                float(current_occupancy_pct),                                # occupancy_pct_lag_1
-                float(prev_pct),                                             # occupancy_pct_lag_2
-                (float(current_occupancy_pct) + float(prev_pct)) / 2.0,     # occupancy_pct_rolling_mean_4
-                1.0 if is_klcc_source else 0.0,                              # is_klcc_source
+                float(target_hour),  # hour_of_day
+                float(target_day_of_week),  # day_of_week
+                1.0 if target_day_of_week >= 5 else 0.0,  # is_weekend
+                math.sin(2 * math.pi * target_hour / 24),  # hour_sin
+                math.cos(2 * math.pi * target_hour / 24),  # hour_cos
+                math.sin(2 * math.pi * target_day_of_week / 7),  # dow_sin
+                math.cos(2 * math.pi * target_day_of_week / 7),  # dow_cos
+                float(current_occupancy_pct),  # occupancy_pct_lag_1
+                float(prev_pct),  # occupancy_pct_lag_2
+                (float(current_occupancy_pct) + float(prev_pct)) / 2.0,  # occupancy_pct_rolling_mean_4
+                1.0 if is_klcc_source else 0.0,  # is_klcc_source
             ],
             dtype=np.float64,
         ).reshape(1, -1)

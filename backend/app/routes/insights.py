@@ -68,22 +68,30 @@ def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
     time_label = request.args.get("time", "10:00").strip()
 
     if day not in VALID_DAYS:
-        return None, error_response(
-            "Invalid day. Use monday-sunday.",
-            400,
-            code="validation_error",
-        ), None
+        return (
+            None,
+            error_response(
+                "Invalid day. Use monday-sunday.",
+                400,
+                code="validation_error",
+            ),
+            None,
+        )
 
     try:
         hour = int(time_label.split(":")[0])
         if hour < 0 or hour > 23:
             raise ValueError("hour out of range")
-    except Exception:
-        return None, error_response(
-            "Invalid time. Use HH:MM in 24-hour format.",
-            400,
-            code="validation_error",
-        ), None
+    except (ValueError, IndexError):
+        return (
+            None,
+            error_response(
+                "Invalid time. Use HH:MM in 24-hour format.",
+                400,
+                code="validation_error",
+            ),
+            None,
+        )
 
     return day, time_label, hour
 
@@ -112,10 +120,7 @@ def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, A
     )
 
     # Fetch walk_times separately (JSON column cannot be used in GROUP BY on PostgreSQL)
-    zone_walk_times = {
-        z.id: z.walk_times or {}
-        for z in Zone.query.filter_by(lot_id=lot_id).all()
-    }
+    zone_walk_times = {z.id: z.walk_times or {} for z in Zone.query.filter_by(lot_id=lot_id).all()}
 
     zone_rows: list[dict[str, Any]] = []
     for zone_id, name, total_slots, occupied_slots in rows:
@@ -176,7 +181,10 @@ def _zone_previous_occupancy_pct(zone_id: str) -> float | None:
 
 
 def _ml_prediction_rows(
-    service: Any, zone_rows: list[dict[str, Any]], day: str, hour: int,
+    service: Any,
+    zone_rows: list[dict[str, Any]],
+    day: str,
+    hour: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]] | None:
     """Produce predictions using the trained ML model.
 
@@ -223,7 +231,9 @@ def _ml_prediction_rows(
 
 
 def _heuristic_prediction_rows(
-    zone_rows: list[dict[str, Any]], day: str, hour: int,
+    zone_rows: list[dict[str, Any]],
+    day: str,
+    hour: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fallback heuristic predictions when ML model is unavailable."""
     predictions: list[dict[str, Any]] = []
@@ -427,9 +437,7 @@ def get_admin_sensors():
         if last_seen and last_seen >= uptime_window_start:
             sensor_row["slots_seen_24h"] += 1
 
-        if last_seen and (
-            sensor_row["last_seen_at"] is None or last_seen > sensor_row["last_seen_at"]
-        ):
+        if last_seen and (sensor_row["last_seen_at"] is None or last_seen > sensor_row["last_seen_at"]):
             sensor_row["last_seen_at"] = last_seen
             sensor_row["last_distance_cm"] = slot.last_distance_cm
 
@@ -603,6 +611,8 @@ def stream_notifications():
         return auth_error
 
     lot_filter = request.args.get("lot_id", "").strip() or None
+    if lot_filter and not _LOT_ID_RE.fullmatch(lot_filter):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
     heartbeat_interval = max(5, int(current_app.config.get("SSE_HEARTBEAT_INTERVAL_SECONDS", 15)))
     max_duration_seconds = max(60, int(current_app.config.get("SSE_MAX_DURATION_SECONDS", 1800)))
 

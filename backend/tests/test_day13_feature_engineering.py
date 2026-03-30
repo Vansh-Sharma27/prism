@@ -141,7 +141,6 @@ def _build_training_frame() -> pd.DataFrame:
     )
 
 
-
 def test_engineer_features_adds_temporal_and_history_features_without_mutation():
     frame = _build_training_frame()
     original = deepcopy(frame.to_dict(orient="records"))
@@ -175,7 +174,6 @@ def test_engineer_features_adds_temporal_and_history_features_without_mutation()
     assert south["is_klcc_source"] == 1
 
 
-
 def test_engineer_features_rejects_missing_required_columns():
     frame = pd.DataFrame(
         [
@@ -189,7 +187,6 @@ def test_engineer_features_rejects_missing_required_columns():
 
     with pytest.raises(ValueError, match="Missing required columns"):
         engineer_features(frame)
-
 
 
 def test_engineer_features_returns_empty_frame_for_empty_input():

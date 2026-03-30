@@ -21,7 +21,7 @@ def _should_start_mqtt(debug_mode: bool) -> bool:
 
 
 if __name__ == '__main__':
-    debug_mode = os.getenv("PRISM_DEBUG", "true").lower() == "true"
+    debug_mode = os.getenv("PRISM_DEBUG", "false").lower() == "true"
     start_mqtt = _should_start_mqtt(debug_mode)
 
     if start_mqtt:

@@ -1,6 +1,7 @@
 """
 PRISM Backend Application Factory
 """
+
 import json
 import logging
 import os
@@ -116,9 +117,7 @@ def create_app(config_name=None):
     )
     jwt_expiry_hours = max(1, min(_env_int("JWT_ACCESS_TOKEN_EXPIRES", 24), 168))  # Cap at 7 days
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=jwt_expiry_hours)
-    app.config["ALLOW_PUBLIC_READS"] = (
-        os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
-    )
+    app.config["ALLOW_PUBLIC_READS"] = os.getenv("PRISM_ALLOW_PUBLIC_READS", "false").lower() == "true"
     app.config["ALLOW_PRIVILEGED_SELF_REGISTER"] = (
         os.getenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false").lower() == "true"
     )
@@ -131,20 +130,12 @@ def create_app(config_name=None):
         "PRISM_RATE_LIMIT_CAMERA_UPLOAD",
         "120 per minute",
     )
-    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int(
-        "PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15
-    )
-    app.config["SSE_MAX_DURATION_SECONDS"] = _env_int(
-        "PRISM_SSE_MAX_DURATION_SECONDS", 1800
-    )
-    app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int(
-        "PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024
-    )
+    app.config["SSE_HEARTBEAT_INTERVAL_SECONDS"] = _env_int("PRISM_SSE_HEARTBEAT_INTERVAL_SECONDS", 15)
+    app.config["SSE_MAX_DURATION_SECONDS"] = _env_int("PRISM_SSE_MAX_DURATION_SECONDS", 1800)
+    app.config["CAMERA_UPLOAD_MAX_BYTES"] = _env_int("PRISM_CAMERA_UPLOAD_MAX_BYTES", 2 * 1024 * 1024)
     # MAX_CONTENT_LENGTH set to a generous global limit; camera-specific limit
     # is enforced in the camera route via CAMERA_UPLOAD_MAX_BYTES.
-    app.config["MAX_CONTENT_LENGTH"] = _env_int(
-        "PRISM_MAX_CONTENT_LENGTH", 10 * 1024 * 1024
-    )
+    app.config["MAX_CONTENT_LENGTH"] = _env_int("PRISM_MAX_CONTENT_LENGTH", 10 * 1024 * 1024)
     camera_upload_dir = os.getenv("PRISM_CAMERA_UPLOAD_DIR", "").strip()
     app.config["CAMERA_UPLOAD_DIR"] = camera_upload_dir if camera_upload_dir else None
     app.config["CAMERA_UPLOAD_TOKEN"] = os.getenv("PRISM_CAMERA_UPLOAD_TOKEN", "")

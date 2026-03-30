@@ -105,7 +105,8 @@ def upload_camera_image():
         )
 
     safe_camera_id = SAFE_FILENAME_PATTERN.sub("-", camera_id)
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+    upload_ts = datetime.utcnow()
+    timestamp = upload_ts.strftime("%Y%m%dT%H%M%S%f")
     filename = f"{safe_camera_id}_{timestamp}_{secrets.token_hex(3)}{extension}"
 
     upload_dir = _resolve_upload_dir()
@@ -132,6 +133,7 @@ def upload_camera_image():
         classifier = current_app.extensions.get("camera_classifier")
         if classifier is None:
             from app.services.camera_classification_service import CameraClassificationService
+
             classifier = CameraClassificationService()
         result = classifier.classify(payload)
         classification_data = {
@@ -147,7 +149,7 @@ def upload_camera_image():
         "filename": filename,
         "bytes_received": len(payload),
         "content_type": content_type,
-        "uploaded_at": datetime.utcnow().isoformat(),
+        "uploaded_at": upload_ts.isoformat(),
     }
     if classification_data is not None:
         response_data["classification"] = classification_data

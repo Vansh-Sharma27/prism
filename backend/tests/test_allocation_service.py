@@ -161,14 +161,16 @@ class TestAllocationServiceRecommend:
                 total = zone.slots.count()
                 occupied = zone.slots.filter_by(is_occupied=True).count()
                 current_pct = round((occupied / total) * 100, 1) if total else 0.0
-                zone_rows.append({
-                    "zone_id": zone.id,
-                    "name": zone.name,
-                    "total_slots": total,
-                    "occupied_slots": occupied,
-                    "current_occupancy_pct": current_pct,
-                    "walk_times": zone.walk_times or {},
-                })
+                zone_rows.append(
+                    {
+                        "zone_id": zone.id,
+                        "name": zone.name,
+                        "total_slots": total,
+                        "occupied_slots": occupied,
+                        "current_occupancy_pct": current_pct,
+                        "walk_times": zone.walk_times or {},
+                    }
+                )
 
             predictions = [
                 {

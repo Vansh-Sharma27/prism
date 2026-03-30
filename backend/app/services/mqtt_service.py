@@ -73,6 +73,7 @@ class MQTTService:
         mqtt_tls = os.getenv("MQTT_TLS_ENABLED", "").lower()
         if mqtt_tls == "true" or (mqtt_tls == "" and self.port == 8883):
             import ssl
+
             ca_certs = os.getenv("MQTT_TLS_CA_CERTS") or None
             self.client.tls_set(ca_certs=ca_certs, tls_version=ssl.PROTOCOL_TLS_CLIENT)
             logger.info("MQTT TLS enabled | ca_certs=%s", ca_certs or "system-default")
