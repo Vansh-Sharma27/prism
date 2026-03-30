@@ -563,8 +563,9 @@ function mapApiSlot(slot: ApiSlot): ParkingSlot {
 function mapLotFromSlots(apiLot: ApiLot, slotsForLot: ParkingSlot[]): ParkingLot {
   const occupiedSlots = slotsForLot.filter((slot) => slot.status === "occupied").length;
   const offlineSlots = slotsForLot.filter((slot) => slot.status === "offline").length;
-  const lotLastSync = slotsForLot.length > 0
-    ? Math.max(...slotsForLot.map((slot) => slot.lastUpdate))
+  const liveSlots = slotsForLot.filter((slot) => slot.lastUpdate > 0);
+  const lotLastSync = liveSlots.length > 0
+    ? Math.max(...liveSlots.map((slot) => slot.lastUpdate))
     : Math.floor(Date.now() / 1000);
 
   return {
@@ -587,8 +588,9 @@ function buildSystemStats(lots: ParkingLot[], slots: ParkingSlot[]): SystemStats
   const vacantSlots = Math.max(totalSlots - occupiedSlots - offlineSlots, 0);
   const occupancyRate = totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
 
-  const lastUpdate = slots.length > 0
-    ? Math.max(...slots.map((slot) => slot.lastUpdate))
+  const liveSlots = slots.filter((slot) => slot.lastUpdate > 0);
+  const lastUpdate = liveSlots.length > 0
+    ? Math.max(...liveSlots.map((slot) => slot.lastUpdate))
     : Math.floor(Date.now() / 1000);
 
   return {

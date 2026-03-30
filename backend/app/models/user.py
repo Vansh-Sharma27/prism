@@ -45,6 +45,11 @@ class User(db.Model):
         """Increment failed login counter and lock if threshold exceeded."""
         from datetime import timedelta
 
+        # Reset counter if a previous lockout has already expired (P2 fix).
+        if self.locked_until is not None and datetime.utcnow() >= self.locked_until:
+            self.failed_login_count = 0
+            self.locked_until = None
+
         self.failed_login_count = (self.failed_login_count or 0) + 1
         if self.failed_login_count >= MAX_FAILED_LOGINS:
             self.locked_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
