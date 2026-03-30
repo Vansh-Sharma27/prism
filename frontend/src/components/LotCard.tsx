@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ParkingLot } from "@/types/parking";
 import { formatTimestamp } from "@/lib/format";
-import { MapPin, ChevronRight, Wifi, WifiOff, AlertTriangle } from "lucide-react";
+import { MapPin, ChevronRight, Wifi, WifiOff, TriangleAlert } from "lucide-react";
 
 interface LotCardProps {
   lot: ParkingLot;
@@ -67,7 +67,7 @@ export function LotCard({ lot, index }: LotCardProps) {
 
         <div className="flex items-center gap-2 ml-2 shrink-0">
           {!isHealthy && (
-            <AlertTriangle size={14} className="text-[var(--warning)] animate-pulse-warning" />
+            <TriangleAlert size={14} className="text-[var(--warning)] animate-pulse-warning" />
           )}
           {isHealthy ? (
             <Wifi size={14} className="text-[var(--vacant)]" />

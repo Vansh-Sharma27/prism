@@ -1,4 +1,4 @@
-import { AlertCircle, Database, Search, Plus } from "lucide-react";
+import { CircleAlert, Database, Search, Plus } from "lucide-react";
 
 type EmptyStateVariant = "no-data" | "no-results" | "error" | "offline";
 
@@ -15,8 +15,8 @@ interface EmptyStateProps {
 const icons = {
   "no-data": Database,
   "no-results": Search,
-  "error": AlertCircle,
-  "offline": AlertCircle,
+  "error": CircleAlert,
+  "offline": CircleAlert,
 };
 
 const colors = {
