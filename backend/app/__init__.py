@@ -41,7 +41,7 @@ def _rate_limit_key() -> str:
     return get_remote_address() or "unknown"
 
 
-limiter = Limiter(key_func=_rate_limit_key, default_limits=[])
+limiter = Limiter(key_func=_rate_limit_key, default_limits=["200 per minute"])
 
 
 def _env_int(name: str, default: int) -> int:
@@ -155,6 +155,15 @@ def create_app(config_name=None):
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
+
+    # JWT token blocklist (in-memory; cleared on restart — sufficient for
+    # single-process deployments; upgrade to Redis for multi-worker setups)
+    _jwt_blocklist: set[str] = set()
+    app.extensions["jwt_blocklist"] = _jwt_blocklist
+
+    @jwt.token_in_blocklist_loader
+    def _check_token_revoked(_jwt_header, jwt_payload):
+        return jwt_payload["jti"] in _jwt_blocklist
 
     from app.services.camera_classification_service import CameraClassificationService
     from app.services.notifications import configure_notification_broker

@@ -3,8 +3,14 @@ Authentication routes for user registration and login.
 """
 
 from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import (
+    create_access_token,
+    get_jwt,
+    get_jwt_identity,
+    jwt_required,
+)
 from marshmallow import ValidationError
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db, limiter
 from app.models.user import User
@@ -12,6 +18,9 @@ from app.responses import error_response
 from app.schemas import user_login_schema, user_register_schema, user_response_schema
 
 auth_bp = Blueprint("auth", __name__)
+
+# Pre-computed hash for constant-time comparison when user is not found (H2 fix)
+_DUMMY_HASH = generate_password_hash("timing-equalization-dummy-password")
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -56,10 +65,26 @@ def login():
     email = data["email"].strip().lower()
     user = User.query.filter_by(email=email).first()
 
-    if not user or not user.check_password(data["password"]):
+    if not user:
+        # Constant-time comparison to prevent user enumeration via timing (H2)
+        check_password_hash(_DUMMY_HASH, data["password"])
         return error_response("Invalid email or password", 401, code="invalid_credentials")
 
+    if user.is_locked:
+        return error_response(
+            "Account temporarily locked due to repeated failed login attempts",
+            429,
+            code="account_locked",
+        )
+
+    if not user.check_password(data["password"]):
+        user.record_failed_login()
+        db.session.commit()
+        return error_response("Invalid email or password", 401, code="invalid_credentials")
+
+    user.reset_failed_logins()
     access_token = create_access_token(identity=str(user.id))
+    db.session.commit()
 
     return jsonify({"access_token": access_token, "user": user_response_schema.dump(user)}), 200
 
@@ -80,3 +105,15 @@ def get_current_user():
         return error_response("User not found", 404)
 
     return jsonify({"user": user_response_schema.dump(user)}), 200
+
+
+@auth_bp.route("/logout", methods=["POST"])
+@jwt_required()
+@limiter.limit(lambda: current_app.config.get("RATE_LIMIT_AUTH_LOGIN", "10 per minute"))
+def logout():
+    """Revoke the current access token."""
+    jti = get_jwt()["jti"]
+    blocklist = current_app.extensions.get("jwt_blocklist")
+    if blocklist is not None:
+        blocklist.add(jti)
+    return jsonify({"message": "Token revoked"}), 200

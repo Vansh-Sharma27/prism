@@ -53,6 +53,9 @@ def get_lot(lot_id):
     if access_error:
         return access_error
 
+    if not LOT_ID_PATTERN.fullmatch(lot_id):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
+
     lot = db.session.get(ParkingLot, lot_id)
     if lot is None:
         return error_response("Lot not found", 404)

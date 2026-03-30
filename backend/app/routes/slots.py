@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 
 from flask import Blueprint, current_app, jsonify, request
@@ -23,6 +24,8 @@ slots_bp = Blueprint("slots", __name__)
 
 MAX_EVENTS_LIMIT = 500
 MAX_BATCH_SIZE = 100
+_SLOT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_LOT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,50}$")
 
 
 def _require_read_access():
@@ -158,6 +161,9 @@ def get_slot(slot_id):
     if access_error:
         return access_error
 
+    if not _SLOT_ID_RE.fullmatch(slot_id):
+        return error_response("Invalid slot_id format", 400, code="validation_error")
+
     slot = db.session.get(ParkingSlot, slot_id)
     if slot is None:
         return error_response("Slot not found", 404)
@@ -170,6 +176,9 @@ def get_slot(slot_id):
 @limiter.limit(lambda: current_app.config.get("RATE_LIMIT_MUTATION", "60 per minute"))
 def update_slot_status(slot_id):
     """Update slot occupancy status from authorized operators/services."""
+    if not _SLOT_ID_RE.fullmatch(slot_id):
+        return error_response("Invalid slot_id format", 400, code="validation_error")
+
     slot = db.session.get(ParkingSlot, slot_id)
     if slot is None:
         return error_response("Slot not found", 404)
@@ -338,6 +347,9 @@ def get_slot_events(slot_id):
     if access_error:
         return access_error
 
+    if not _SLOT_ID_RE.fullmatch(slot_id):
+        return error_response("Invalid slot_id format", 400, code="validation_error")
+
     requested_limit = request.args.get("limit", 50, type=int)
     limit = max(1, min(requested_limit, MAX_EVENTS_LIMIT))
     events = ParkingEvent.query.filter_by(slot_id=slot_id).order_by(ParkingEvent.timestamp.desc()).limit(limit).all()
@@ -359,6 +371,11 @@ def get_all_events():
     lot_id = request.args.get("lot_id")
     slot_id = request.args.get("slot_id")
     event_type = request.args.get("event_type")
+
+    if lot_id and not _LOT_ID_RE.fullmatch(lot_id):
+        return error_response("Invalid lot_id format", 400, code="validation_error")
+    if slot_id and not _SLOT_ID_RE.fullmatch(slot_id):
+        return error_response("Invalid slot_id format", 400, code="validation_error")
 
     start_at, start_err = _parse_iso_datetime(request.args.get("start"), "start")
     if start_err:
