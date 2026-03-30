@@ -71,11 +71,11 @@ def login():
         return error_response("Invalid email or password", 401, code="invalid_credentials")
 
     if user.is_locked:
-        return error_response(
-            "Account temporarily locked due to repeated failed login attempts",
-            429,
-            code="account_locked",
-        )
+        # Return identical 401 response to prevent user-enumeration side channel.
+        # A locked account silently refuses login without revealing that the
+        # account exists (fixes Codex finding: 429 vs 401 differential).
+        check_password_hash(_DUMMY_HASH, data["password"])
+        return error_response("Invalid email or password", 401, code="invalid_credentials")
 
     if not user.check_password(data["password"]):
         user.record_failed_login()

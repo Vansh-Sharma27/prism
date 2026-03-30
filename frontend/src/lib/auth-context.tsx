@@ -209,9 +209,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [login]);
 
   const logout = useCallback(() => {
+    const token = getStoredToken();
     clearStoredToken();
     setUser(null);
     setError(null);
+
+    // Best-effort server-side token revocation; fire-and-forget so logout
+    // always succeeds from the user's perspective even if the API is down.
+    if (token) {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+      fetch(`${apiBase}/auth/logout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }).catch(() => {
+        // Silently ignore — token is already cleared locally.
+      });
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(

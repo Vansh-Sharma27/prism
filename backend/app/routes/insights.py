@@ -65,7 +65,7 @@ def _time_factor(hour: int) -> float:
 
 def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
     day = request.args.get("day", "wednesday").strip().lower()
-    time_label = request.args.get("time", "10:00").strip()
+    time_param = request.args.get("time", "10:00").strip()
 
     if day not in VALID_DAYS:
         return (
@@ -79,9 +79,13 @@ def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
         )
 
     try:
-        hour = int(time_label.split(":")[0])
+        parts = time_param.split(":")
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
         if hour < 0 or hour > 23:
             raise ValueError("hour out of range")
+        if minute < 0 or minute > 59:
+            raise ValueError("minute out of range")
     except (ValueError, IndexError):
         return (
             None,
@@ -93,7 +97,10 @@ def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
             None,
         )
 
-    return day, time_label, hour
+    # Reconstruct time label from validated integers (not raw user input)
+    # to break the taint chain that CodeQL tracks for XSS (CWE-79).
+    safe_time_label = f"{hour:02d}:{minute:02d}"
+    return day, safe_time_label, hour
 
 
 def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, Any]]]:

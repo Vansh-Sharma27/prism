@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
+from werkzeug.utils import secure_filename
 
 from app import limiter
 from app.responses import error_response
@@ -104,16 +105,22 @@ def upload_camera_image():
             code="payload_too_large",
         )
 
-    safe_camera_id = SAFE_FILENAME_PATTERN.sub("-", camera_id)
+    safe_camera_id = secure_filename(SAFE_FILENAME_PATTERN.sub("-", camera_id))
+    if not safe_camera_id:
+        return error_response("Invalid camera ID for filesystem use", 400, code="validation_error")
     upload_ts = datetime.utcnow()
     timestamp = upload_ts.strftime("%Y%m%dT%H%M%S%f")
-    filename = f"{safe_camera_id}_{timestamp}_{secrets.token_hex(3)}{extension}"
+    raw_filename = f"{safe_camera_id}_{timestamp}_{secrets.token_hex(3)}{extension}"
+    filename = secure_filename(raw_filename)
+    if not filename:
+        return error_response("Invalid filename generated", 400, code="validation_error")
 
     upload_dir = _resolve_upload_dir()
-    file_path = (upload_dir / filename).resolve()
+    resolved_upload_dir = upload_dir.resolve()
+    file_path = (resolved_upload_dir / filename).resolve()
 
     # Ensure resolved path stays within the upload directory (symlink/traversal guard)
-    if not file_path.is_relative_to(upload_dir.resolve()):
+    if not file_path.is_relative_to(resolved_upload_dir):
         return error_response("Invalid upload path", 400, code="validation_error")
 
     try:

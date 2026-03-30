@@ -207,7 +207,15 @@ def create_app(config_name=None):
         ).split(",")
         if origin.strip()
     ]
-    CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": allowed_origins}},
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-Camera-Token", "X-Camera-ID"],
+        expose_headers=["X-Request-ID"],
+        supports_credentials=False,
+        max_age=600,
+    )
 
     @app.before_request
     def _request_context_setup():
@@ -216,23 +224,55 @@ def create_app(config_name=None):
         g.request_id = request_id
         g.request_started_at = time.perf_counter()
 
+    @app.before_request
+    def _enforce_json_content_type():
+        """Reject non-JSON content types on API mutation endpoints (CSRF mitigation).
+
+        Browsers cannot send application/json via <form> or <img> tags, so
+        requiring it on state-changing endpoints prevents simple CSRF attacks
+        even without a dedicated CSRF token.
+        """
+        if not _is_api_path(request.path):
+            return None
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        # Camera upload uses binary content types, not JSON
+        if request.path.startswith("/api/v1/camera/"):
+            return None
+        content_type = (request.content_type or "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return error_response(
+                "Content-Type must be application/json",
+                415,
+                code="unsupported_media_type",
+            )
+
     @app.after_request
     def _request_context_teardown(response):
         request_id = getattr(g, "request_id", None)
         if request_id:
             response.headers["X-Request-ID"] = request_id
 
-        # Security response headers (M6 fix)
+        # Security response headers (M6 fix + hardening)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+            "img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         )
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
         if os.getenv("PRISM_ENABLE_HSTS", "false").lower() == "true":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        # Prevent caching of authenticated API responses
+        if _is_api_path(request.path) and request.headers.get("Authorization"):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+            response.headers["Pragma"] = "no-cache"
 
         if _is_api_path(request.path):
             started_at = getattr(g, "request_started_at", None)
