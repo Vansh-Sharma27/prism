@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-import secrets
 from pathlib import Path
 
 import pytest
@@ -26,6 +24,10 @@ def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PRISM_ALLOW_PRIVILEGED_SELF_REGISTER", "false")
     monkeypatch.setenv("PRISM_CAMERA_UPLOAD_TOKEN", "test-camera-token-xyz")
     monkeypatch.setenv("PRISM_CAMERA_UPLOAD_DIR", str(upload_dir))
+    # Lockout/enumeration tests need to exceed MAX_FAILED_LOGINS without
+    # tripping the per-IP login rate limiter first.
+    monkeypatch.setenv("PRISM_RATE_LIMIT_AUTH_LOGIN", "1000 per minute")
+    monkeypatch.setenv("PRISM_RATE_LIMIT_AUTH_REGISTER", "1000 per minute")
 
     flask_app = create_app()
     flask_app.config.update(TESTING=True)
@@ -58,6 +60,7 @@ def _auth_headers(client, email: str = "admin@prism.local", password: str = "Adm
 # ────────────────────────────────────────────────────────────────────
 # CodeQL HIGH #1 & #2: Path injection in camera.py
 # ────────────────────────────────────────────────────────────────────
+
 
 class TestCameraPathInjection:
     """Verify path traversal is blocked in camera upload endpoint."""
@@ -125,13 +128,14 @@ class TestCameraPathInjection:
 # CodeQL MEDIUM #3 & #4: Reflected XSS in insights.py
 # ────────────────────────────────────────────────────────────────────
 
+
 class TestInsightsXSSPrevention:
     """Verify user input in day/time params is sanitized before response."""
 
     def test_invalid_day_returns_static_error(self, client):
         headers = _auth_headers(client)
         resp = client.get(
-            '/api/v1/lots/lot-a/predict?day=<script>alert(1)</script>&time=10:00',
+            "/api/v1/lots/lot-a/predict?day=<script>alert(1)</script>&time=10:00",
             headers=headers,
         )
         assert resp.status_code == 400
@@ -142,7 +146,7 @@ class TestInsightsXSSPrevention:
     def test_invalid_time_returns_static_error(self, client):
         headers = _auth_headers(client)
         resp = client.get(
-            '/api/v1/lots/lot-a/predict?day=monday&time=<img/onerror=alert(1)>',
+            "/api/v1/lots/lot-a/predict?day=monday&time=<img/onerror=alert(1)>",
             headers=headers,
         )
         assert resp.status_code == 400
@@ -192,6 +196,7 @@ class TestInsightsXSSPrevention:
 # ────────────────────────────────────────────────────────────────────
 # Codex finding: User enumeration via 429 lockout
 # ────────────────────────────────────────────────────────────────────
+
 
 class TestUserEnumerationPrevention:
     """Locked accounts must be indistinguishable from non-existent accounts."""
@@ -257,6 +262,7 @@ class TestUserEnumerationPrevention:
 # Security Headers
 # ────────────────────────────────────────────────────────────────────
 
+
 class TestSecurityHeaders:
     """Verify all security response headers are set correctly."""
 
@@ -293,6 +299,7 @@ class TestSecurityHeaders:
 # CORS Configuration
 # ────────────────────────────────────────────────────────────────────
 
+
 class TestCORSConfiguration:
     """Verify CORS is properly restricted."""
 
@@ -321,6 +328,7 @@ class TestCORSConfiguration:
 # ────────────────────────────────────────────────────────────────────
 # CSRF Mitigation (JSON Content-Type enforcement)
 # ────────────────────────────────────────────────────────────────────
+
 
 class TestCSRFMitigation:
     """Verify JSON content-type enforcement on mutation endpoints."""
@@ -366,6 +374,7 @@ class TestCSRFMitigation:
 # ────────────────────────────────────────────────────────────────────
 # Auth security: lockout still works (just silently)
 # ────────────────────────────────────────────────────────────────────
+
 
 class TestLockoutStillEnforced:
     """Account lockout must still prevent login even though response is 401."""

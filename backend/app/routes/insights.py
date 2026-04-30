@@ -63,20 +63,25 @@ def _time_factor(hour: int) -> float:
     return -8.0
 
 
-def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
+_PARSE_ERROR_MESSAGES: dict[str, str] = {
+    "invalid_day": "Invalid day. Use monday-sunday.",
+    "invalid_time": "Invalid time. Use HH:MM in 24-hour format.",
+}
+
+
+def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, str, None]:
+    """Parse and validate day/time query params.
+
+    Returns (day, safe_time_label, hour) on success, or (None, error_key, None)
+    where error_key is a member of _PARSE_ERROR_MESSAGES. Returning a key
+    rather than a Response keeps user-controlled input out of the caller's
+    return path so CodeQL does not track a taint flow into a render sink.
+    """
     day = request.args.get("day", "wednesday").strip().lower()
     time_param = request.args.get("time", "10:00").strip()
 
     if day not in VALID_DAYS:
-        return (
-            None,
-            error_response(
-                "Invalid day. Use monday-sunday.",
-                400,
-                code="validation_error",
-            ),
-            None,
-        )
+        return None, "invalid_day", None
 
     try:
         parts = time_param.split(":")
@@ -87,20 +92,18 @@ def _parse_day_and_time() -> tuple[str, str, int] | tuple[None, object, None]:
         if minute < 0 or minute > 59:
             raise ValueError("minute out of range")
     except (ValueError, IndexError):
-        return (
-            None,
-            error_response(
-                "Invalid time. Use HH:MM in 24-hour format.",
-                400,
-                code="validation_error",
-            ),
-            None,
-        )
+        return None, "invalid_time", None
 
-    # Reconstruct time label from validated integers (not raw user input)
-    # to break the taint chain that CodeQL tracks for XSS (CWE-79).
     safe_time_label = f"{hour:02d}:{minute:02d}"
     return day, safe_time_label, hour
+
+
+def _parse_error(error_key: str) -> Any:
+    return error_response(
+        _PARSE_ERROR_MESSAGES[error_key],
+        400,
+        code="validation_error",
+    )
 
 
 def _lot_zone_snapshot(lot_id: str) -> tuple[ParkingLot | None, list[dict[str, Any]]]:
@@ -295,7 +298,7 @@ def get_prediction(lot_id: str):
 
     parsed = _parse_day_and_time()
     if parsed[0] is None:
-        return parsed[1]
+        return _parse_error(parsed[1])
     day, time_label, hour = parsed
 
     lot, zone_rows = _lot_zone_snapshot(lot_id)
@@ -343,7 +346,7 @@ def get_recommendation(lot_id: str):
 
     parsed = _parse_day_and_time()
     if parsed[0] is None:
-        return parsed[1]
+        return _parse_error(parsed[1])
     day, time_label, hour = parsed
 
     lot, zone_rows = _lot_zone_snapshot(lot_id)
